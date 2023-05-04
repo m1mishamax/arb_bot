@@ -45,7 +45,7 @@ sorted_volumes = sorted(filtered_volumes, key=lambda x: float(x['quoteVolume']))
 selected_pairs = [pair['symbol'] for pair in sorted_volumes[:200]]
 
 # Store latest mark prices
-latest_prices = {pair: {'binance': None, 'bybit': None} for pair in selected_pairs}
+latest_prices = {pair: {'binance': [None, None], 'bybit': [None, None]} for pair in selected_pairs}
 
 
 def process_binance_data(data):
@@ -55,7 +55,8 @@ def process_binance_data(data):
     pair = data['s']
     price = float(data['p'])
     timestamp = datetime.utcfromtimestamp(data['E'] / 1000)  # Convert to seconds with milliseconds
-    latest_prices[pair]['binance'] = {'price': price, 'timestamp': timestamp}
+    latest_prices[pair]['binance'].pop(0)  # Remove the oldest price data
+    latest_prices[pair]['binance'].append({'price': price, 'timestamp': timestamp})  # Add the new price data
     calculate_arbitrage(pair)
 
 
@@ -70,16 +71,17 @@ def process_bybit_data(data):
     pair = update_data['symbol']
     price = float(update_data['mark_price'])
     timestamp = datetime.utcfromtimestamp(int(data['timestamp_e6']) / 1000000)  # Convert to seconds with milliseconds
-    latest_prices[pair]['bybit'] = {'price': price, 'timestamp': timestamp}
+    latest_prices[pair]['bybit'].pop(0)  # Remove the oldest price data
+    latest_prices[pair]['bybit'].append({'price': price, 'timestamp': timestamp})  # Add the new price data
     calculate_arbitrage(pair)
 
 
-ARBITRAGE_THRESHOLD = 0.3
+ARBITRAGE_THRESHOLD = 0.2
 
 
 def calculate_arbitrage(pair):
-    bybit_data = latest_prices[pair]['bybit']
-    binance_data = latest_prices[pair]['binance']
+    bybit_data = latest_prices[pair]['bybit'][-1]
+    binance_data = latest_prices[pair]['binance'][-1]
 
     if bybit_data is None or binance_data is None:
         return
@@ -97,6 +99,23 @@ def calculate_arbitrage(pair):
         print(f"Bybit price: {bybit_price}, Binance price: {binance_price}")
         print(f"Bybit timestamp: {bybit_timestamp}, Binance timestamp: {binance_timestamp}")
         print(f"Timestamp difference: {abs((bybit_timestamp - binance_timestamp).total_seconds()) * 1000} ms")
+
+        # Calculate price change between previous and current price for both exchanges
+        bybit_prev_data = latest_prices[pair]['bybit'][0]
+        binance_prev_data = latest_prices[pair]['binance'][0]
+
+        if bybit_prev_data is not None and binance_prev_data is not None:
+            bybit_price_change = ((bybit_price - bybit_prev_data['price']) / bybit_prev_data['price']) * 100
+            binance_price_change = ((binance_price - binance_prev_data['price']) / binance_prev_data['price']) * 100
+
+            print(f"Bybit price change: {bybit_price_change:.2f}%, Binance price change: {binance_price_change:.2f}%")
+
+            # Identify which exchange created the arbitrage opportunity
+            if abs(bybit_price_change) > abs(binance_price_change):
+                print("Arbitrage opportunity created by Bybit.")
+            else:
+                print("Arbitrage opportunity created by Binance.")
+
         print()
 
 
