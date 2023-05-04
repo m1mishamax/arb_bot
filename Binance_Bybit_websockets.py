@@ -116,7 +116,7 @@ async def process_bybit_data(data):
     await calculate_arbitrage(pair)
 
 
-ARBITRAGE_THRESHOLD = 0.2
+ARBITRAGE_THRESHOLD = 0.30
 
 
 async def calculate_arbitrage(pair):
