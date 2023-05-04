@@ -54,7 +54,7 @@ def process_binance_data(data):
 
     pair = data['s']
     price = float(data['p'])
-    timestamp = data['E'] // 1000  # Convert to milliseconds
+    timestamp = datetime.utcfromtimestamp(data['E'] / 1000)  # Convert to seconds with milliseconds
     latest_prices[pair]['binance'] = {'price': price, 'timestamp': timestamp}
     calculate_arbitrage(pair)
 
@@ -69,12 +69,12 @@ def process_bybit_data(data):
 
     pair = update_data['symbol']
     price = float(update_data['mark_price'])
-    timestamp = int(data['timestamp_e6']) // 1000000  # Convert to milliseconds
+    timestamp = datetime.utcfromtimestamp(int(data['timestamp_e6']) / 1000000)  # Convert to seconds with milliseconds
     latest_prices[pair]['bybit'] = {'price': price, 'timestamp': timestamp}
     calculate_arbitrage(pair)
 
 
-ARBITRAGE_THRESHOLD = 0.2
+ARBITRAGE_THRESHOLD = 0.3
 
 
 def calculate_arbitrage(pair):
@@ -92,12 +92,13 @@ def calculate_arbitrage(pair):
     percentage_diff = ((bybit_price - binance_price) / binance_price) * 100
 
     if abs(percentage_diff) >= ARBITRAGE_THRESHOLD:
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]  # Include milliseconds in the output
         print(f"Arbitrage opportunity for {pair}: {percentage_diff:.2f}% at {current_time}")
         print(f"Bybit price: {bybit_price}, Binance price: {binance_price}")
         print(f"Bybit timestamp: {bybit_timestamp}, Binance timestamp: {binance_timestamp}")
-        print(f"Timestamp difference: {abs(bybit_timestamp - binance_timestamp)} ms")
+        print(f"Timestamp difference: {abs((bybit_timestamp - binance_timestamp).total_seconds()) * 1000} ms")
         print()
+
 
 
 # Update websocket handling
