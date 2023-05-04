@@ -121,10 +121,11 @@ def calculate_arbitrage(pair):
         last_arbitrage_opportunities[pair] = {
             'bybit_price': bybit_price,
             'binance_price': binance_price,
-            'percentage_diff': percentage_diff
+            'percentage_diff': percentage_diff,
+            'printed': False
         }
     else:
-        if pair in last_arbitrage_opportunities:
+        if pair in last_arbitrage_opportunities and not last_arbitrage_opportunities[pair]['printed']:
             last_opportunity = last_arbitrage_opportunities[pair]
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]  # Include milliseconds in the output
             print(f"Update for {pair} at {current_time}:")
@@ -142,6 +143,8 @@ def calculate_arbitrage(pair):
 
             print(f"Bybit price change: {bybit_price_change:.2f}%, Binance price change: {binance_price_change:.2f}%")
             print()
+
+            last_arbitrage_opportunities[pair]['printed'] = True
 
 
 
