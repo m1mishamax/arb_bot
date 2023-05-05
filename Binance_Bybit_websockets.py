@@ -227,36 +227,46 @@ async def print_delayed_updates():
 # Update websocket handling
 async def binance_websocket():
     uri = "wss://fstream.binance.com/ws"
-    async with websockets.connect(uri) as websocket:
-        for pair in selected_pairs:
-            payload = {
-                "method": "SUBSCRIBE",
-                "params": [f"{pair.lower()}@markPrice"],
-                "id": 1
-            }
-            await websocket.send(json.dumps(payload))
-            await asyncio.sleep(0.2)  # Add a 200 ms delay between subscription requests
+    while True:
+        try:
+            async with websockets.connect(uri) as websocket:
+                for pair in selected_pairs:
+                    payload = {
+                        "method": "SUBSCRIBE",
+                        "params": [f"{pair.lower()}@markPrice"],
+                        "id": 1
+                    }
+                    await websocket.send(json.dumps(payload))
+                    await asyncio.sleep(0.2)  # Add a 200 ms delay between subscription requests
 
-        while True:
-            message = await websocket.recv()
-            data = json.loads(message)
-            process_binance_data(data)
-
+                while True:
+                    message = await websocket.recv()
+                    data = json.loads(message)
+                    process_binance_data(data)
+        except asyncio.CancelledError:
+            print("Binance websocket connection cancelled. Reconnecting...")
+            await asyncio.sleep(5)  # Sleep for 5 seconds before reconnecting
 
 async def bybit_websocket():
     uri = "wss://stream.bybit.com/realtime_public"
-    async with websockets.connect(uri) as websocket:
-        for pair in selected_pairs:
-            payload = {
-                "op": "subscribe",
-                "args": [f"instrument_info.100ms.{pair}"]
-            }
-            await websocket.send(json.dumps(payload))
+    while True:
+        try:
+            async with websockets.connect(uri) as websocket:
+                for pair in selected_pairs:
+                    payload = {
+                        "op": "subscribe",
+                        "args": [f"instrument_info.100ms.{pair}"]
+                    }
+                    await websocket.send(json.dumps(payload))
 
-        while True:
-            message = await websocket.recv()
-            data = json.loads(message)
-            process_bybit_data(data)
+                while True:
+                    message = await websocket.recv()
+                    data = json.loads(message)
+                    process_bybit_data(data)
+        except asyncio.CancelledError:
+            print("Bybit websocket connection cancelled. Reconnecting...")
+            await asyncio.sleep(5)  # Sleep for 5 seconds before reconnecting
+
 
 
 async def print_statement():
@@ -272,7 +282,7 @@ async def print_statement():
     # Loop indefinitely
     while True:
         # Wait for 10 minutes using asyncio.sleep
-        await asyncio.sleep(600)
+        await asyncio.sleep(300)
 
         # Print the statement
         count += 1
