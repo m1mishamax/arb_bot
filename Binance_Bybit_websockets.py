@@ -4,8 +4,7 @@ import json
 import requests
 from typing import List
 from datetime import datetime
-import random
-
+import aiohttp
 # Constants
 API_BASE_BINANCE = "https://fapi.binance.com"
 API_BASE_BYBIT = "https://api.bybit.com"
@@ -117,15 +116,12 @@ async def process_bybit_data(data):
     await calculate_arbitrage(pair)
 
 
-ARBITRAGE_THRESHOLD = 0.15
+ARBITRAGE_THRESHOLD = 0.10
 
 
 async def calculate_arbitrage(pair):
     bybit_data = latest_prices[pair]['bybit'][-1]
     binance_data = latest_prices[pair]['binance'][-1]
-
-    bybit_prev_data = latest_prices[pair]['bybit'][0]
-    binance_prev_data = latest_prices[pair]['binance'][0]
 
     if bybit_data is None or binance_data is None:
         return
@@ -135,17 +131,6 @@ async def calculate_arbitrage(pair):
     bybit_timestamp = bybit_data['timestamp']
     binance_timestamp = binance_data['timestamp']
 
-    if bybit_prev_data is not None and binance_prev_data is not None:
-        prev_bybit_price = bybit_prev_data['price']
-        prev_binance_price = binance_prev_data['price']
-        prev_bybit_timestamp = bybit_prev_data['timestamp']
-        prev_binance_timestamp = binance_prev_data['timestamp']
-    else:
-        prev_bybit_price = None
-        prev_binance_price = None
-        prev_bybit_timestamp = None
-        prev_binance_timestamp = None
-
     percentage_diff = ((bybit_price - binance_price) / binance_price) * 100
 
     if abs(percentage_diff) >= ARBITRAGE_THRESHOLD:
@@ -154,8 +139,6 @@ async def calculate_arbitrage(pair):
         print(f"Bybit price: {bybit_price}, Binance price: {binance_price}")
         print(f"Bybit timestamp: {bybit_timestamp}, Binance timestamp: {binance_timestamp}")
         print(f"Timestamp difference: {abs((bybit_timestamp - binance_timestamp).total_seconds()) * 1000} ms")
-        print(f"Previous Bybit price: {prev_bybit_price}, Previous Binance price: {prev_binance_price}")
-        print(f"Previous Bybit timestamp: {prev_bybit_timestamp}, Previous Binance timestamp: {prev_binance_timestamp}")
 
         # Calculate price change between previous and current price for both exchanges
         bybit_prev_data = latest_prices[pair]['bybit'][0]
@@ -184,8 +167,8 @@ async def calculate_arbitrage(pair):
         if pair in last_arbitrage_opportunities and not last_arbitrage_opportunities[pair]['printed']:
             last_opportunity = last_arbitrage_opportunities[pair]
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]  # Include milliseconds in the output
-            print(f"*Update for below ARBITRAGE_THRESHOLD {pair} at {current_time}:")
-            print(f"Previous arbitrage opportunity: {last_opportunity['percentage_diff']:.2f}%")
+            print(f"*Update for {pair} at {current_time}:")
+            print(f"Previous arbitrage opportunity*: {last_opportunity['percentage_diff']:.2f}%")
             print(f"Current price difference: {percentage_diff:.2f}%")
             print(f"Bybit price: {bybit_price}, Binance price: {binance_price}")
             print(f"Bybit timestamp: {bybit_timestamp}, Binance timestamp: {binance_timestamp}")
@@ -205,56 +188,60 @@ async def calculate_arbitrage(pair):
 
 
 # Update websocket handling
+import random
+
+MAX_RECONNECT_TRIES = 10
+
+
 async def binance_websocket():
-    combined_streams = "/".join([f"{pair.lower()}@bookTicker" for pair in selected_pairs])
-    uri = f"wss://stream.binance.com:9443/stream?streams={combined_streams}"
-    max_retries = 5
-    backoff_factor = 2
-    current_retry = 0
+    uri = "wss://fstream.binance.com/ws"
 
-    while current_retry <= max_retries:
-        try:
-            async with websockets.connect(uri, timeout=10) as websocket:
-                while True:
-                    message = await websocket.recv()
-                    data = json.loads(message)
-                    await process_binance_data(data)
-        except (asyncio.TimeoutError, websockets.exceptions.ConnectionClosedError) as e:
-            sleep_time = backoff_factor * (2 ** current_retry) + random.uniform(0, 1)
-            print(f"Binance websocket connection error ({type(e).__name__}). Retrying in {sleep_time:.2f} seconds...")
-            await asyncio.sleep(sleep_time)
-            current_retry += 1
+    async with aiohttp.ClientSession() as session:
+        while True:
+            try:
+                async with session.ws_connect(uri) as websocket:
+                    for pair in selected_pairs:
+                        payload = {
+                            "method": "SUBSCRIBE",
+                            "params": [f"{pair.lower()}@markPrice"],
+                            "id": 1
+                        }
+                        await websocket.send_json(payload)
+                        await asyncio.sleep(0.2)  # Add a 200 ms delay between subscription requests
 
-    print("Max retries reached. Exiting.")
-
+                    async for msg in websocket:
+                        if msg.type == aiohttp.WSMsgType.TEXT:
+                            data = msg.json()
+                            await process_binance_data(data)
+                        elif msg.type == aiohttp.WSMsgType.CLOSED:
+                            raise aiohttp.ClientConnectionError("Binance WebSocket connection closed.")
+            except aiohttp.ClientConnectionError:
+                print("Binance WebSocket connection closed. Reconnecting in 5 seconds...")
+                await asyncio.sleep(5)  # Wait for 5 seconds before attempting to reconnect
 
 async def bybit_websocket():
     uri = "wss://stream.bybit.com/realtime_public"
-    max_retries = 5
-    backoff_factor = 2
-    current_retry = 0
 
-    while current_retry <= max_retries:
-        try:
-            async with websockets.connect(uri, timeout=10) as websocket:
-                for pair in selected_pairs:
-                    payload = {
-                        "op": "subscribe",
-                        "args": [f"instrument_info.100ms.{pair}"]
-                    }
-                    await websocket.send(json.dumps(payload))
+    async with aiohttp.ClientSession() as session:
+        while True:
+            try:
+                async with session.ws_connect(uri) as websocket:
+                    for pair in selected_pairs:
+                        payload = {
+                            "op": "subscribe",
+                            "args": [f"instrument_info.100ms.{pair}"]
+                        }
+                        await websocket.send_json(payload)
 
-                while True:
-                    message = await websocket.recv()
-                    data = json.loads(message)
-                    await process_bybit_data(data)
-        except (asyncio.TimeoutError, websockets.exceptions.ConnectionClosedError) as e:
-            sleep_time = backoff_factor * (2 ** current_retry) + random.uniform(0, 1)
-            print(f"Bybit websocket connection error ({type(e).__name__}). Retrying in {sleep_time:.2f} seconds...")
-            await asyncio.sleep(sleep_time)
-            current_retry += 1
-
-    print("Max retries reached. Exiting.")
+                    async for msg in websocket:
+                        if msg.type == aiohttp.WSMsgType.TEXT:
+                            data = msg.json()
+                            await process_bybit_data(data)
+                        elif msg.type == aiohttp.WSMsgType.CLOSED:
+                            raise aiohttp.ClientConnectionError("Bybit WebSocket connection closed.")
+            except aiohttp.ClientConnectionError:
+                print("Bybit WebSocket connection closed. Reconnecting in 5 seconds...")
+                await asyncio.sleep(5)  # Wait for 5 seconds before attempting to reconnect
 
 
 async def main():
