@@ -4,6 +4,7 @@ import json
 import requests
 from typing import List
 from datetime import datetime
+import random
 
 # Constants
 API_BASE_BINANCE = "https://fapi.binance.com"
@@ -50,7 +51,8 @@ async def print_delayed_update(pair):
     # Calculate price change between previous and current price for both exchanges
     last_opportunity = last_arbitrage_opportunities[pair]
     bybit_price_change = ((bybit_price - last_opportunity['bybit_price']) / last_opportunity['bybit_price']) * 100
-    binance_price_change = ((binance_price - last_opportunity['binance_price']) / last_opportunity['binance_price']) * 100
+    binance_price_change = ((binance_price - last_opportunity['binance_price']) / last_opportunity[
+        'binance_price']) * 100
 
     print(f"Bybit price change: {bybit_price_change:.2f}%, Binance price change: {binance_price_change:.2f}%")
 
@@ -60,7 +62,6 @@ async def print_delayed_update(pair):
         print("Arbitrage opportunity created by Binance.")
 
     print()
-
 
 
 # Fetch and process trading pairs
@@ -116,7 +117,7 @@ async def process_bybit_data(data):
     await calculate_arbitrage(pair)
 
 
-ARBITRAGE_THRESHOLD = 0.30
+ARBITRAGE_THRESHOLD = 0.25
 
 
 async def calculate_arbitrage(pair):
@@ -167,8 +168,8 @@ async def calculate_arbitrage(pair):
         if pair in last_arbitrage_opportunities and not last_arbitrage_opportunities[pair]['printed']:
             last_opportunity = last_arbitrage_opportunities[pair]
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]  # Include milliseconds in the output
-            print(f"*Update for {pair} at {current_time}:")
-            print(f"Previous arbitrage opportunity*: {last_opportunity['percentage_diff']:.2f}%")
+            print(f"*Update for below ARBITRAGE_THRESHOLD {pair} at {current_time}:")
+            print(f"Previous arbitrage opportunity: {last_opportunity['percentage_diff']:.2f}%")
             print(f"Current price difference: {percentage_diff:.2f}%")
             print(f"Bybit price: {bybit_price}, Binance price: {binance_price}")
             print(f"Bybit timestamp: {bybit_timestamp}, Binance timestamp: {binance_timestamp}")
@@ -193,7 +194,7 @@ async def binance_websocket():
 
     while True:
         try:
-            async with websockets.connect(uri) as websocket:
+            async with websockets.connect(uri, timeout=10) as websocket:
                 for pair in selected_pairs:
                     payload = {
                         "method": "SUBSCRIBE",
@@ -214,10 +215,13 @@ async def binance_websocket():
 
 async def bybit_websocket():
     uri = "wss://stream.bybit.com/realtime_public"
+    max_retries = 5
+    backoff_factor = 2
+    current_retry = 0
 
-    while True:
+    while current_retry <= max_retries:
         try:
-            async with websockets.connect(uri) as websocket:
+            async with websockets.connect(uri, timeout=10) as websocket:
                 for pair in selected_pairs:
                     payload = {
                         "op": "subscribe",
@@ -229,10 +233,13 @@ async def bybit_websocket():
                     message = await websocket.recv()
                     data = json.loads(message)
                     await process_bybit_data(data)
-        except websockets.ConnectionClosedError:
-            print("Bybit WebSocket connection closed. Reconnecting in 5 seconds...")
-            await asyncio.sleep(5)  # Wait for 5 seconds before attempting to reconnect
+        except asyncio.TimeoutError:
+            sleep_time = backoff_factor * (2 ** current_retry) + random.uniform(0, 1)
+            print(f"Bybit websocket connection timeout. Retrying in {sleep_time:.2f} seconds...")
+            await asyncio.sleep(sleep_time)
+            current_retry += 1
 
+    print("Max retries reached. Exiting.")
 
 
 async def main():
