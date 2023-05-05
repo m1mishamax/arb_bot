@@ -51,6 +51,8 @@ latest_prices = {pair: {'binance': [None, None], 'bybit': [None, None]} for pair
 last_arbitrage_opportunities = {}
 # Store delayed prints
 delayed_prints = {}
+# Add this after the line where latest_prices is defined
+last_received_timestamps = {pair: {'binance': None, 'bybit': None} for pair in selected_pairs}
 
 
 def process_binance_data(data):
@@ -62,6 +64,7 @@ def process_binance_data(data):
     timestamp = datetime.utcfromtimestamp(data['E'] / 1000)  # Convert to seconds with milliseconds
     latest_prices[pair]['binance'].pop(0)  # Remove the oldest price data
     latest_prices[pair]['binance'].append({'price': price, 'timestamp': timestamp})  # Add the new price data
+    last_received_timestamps[pair]['binance'] = timestamp  # Store the timestamp of the received data
     calculate_arbitrage(pair)
 
 
@@ -78,10 +81,32 @@ def process_bybit_data(data):
     timestamp = datetime.utcfromtimestamp(int(data['timestamp_e6']) / 1000000)  # Convert to seconds with milliseconds
     latest_prices[pair]['bybit'].pop(0)  # Remove the oldest price data
     latest_prices[pair]['bybit'].append({'price': price, 'timestamp': timestamp})  # Add the new price data
+    last_received_timestamps[pair]['bybit'] = timestamp  # Store the timestamp of the received data
     calculate_arbitrage(pair)
 
 
-ARBITRAGE_THRESHOLD = 0.35
+async def print_heartbeat():
+    while True:
+        await asyncio.sleep(60*3)  # Print the heartbeat every 60*3 seconds
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"Heartbeat at {current_time}")
+
+        for pair in selected_pairs:
+            binance_last_received = last_received_timestamps[pair]['binance']
+            bybit_last_received = last_received_timestamps[pair]['bybit']
+
+            if binance_last_received:
+                binance_diff = (datetime.utcnow() - binance_last_received).total_seconds()
+                print(f"{pair} Binance: {binance_diff:.2f}s since last update")
+
+            if bybit_last_received:
+                bybit_diff = (datetime.utcnow() - bybit_last_received).total_seconds()
+                print(f"{pair} Bybit: {bybit_diff:.2f}s since last update")
+
+        print()
+
+
+ARBITRAGE_THRESHOLD = 0.27
 
 
 def calculate_arbitrage(pair):
@@ -162,11 +187,11 @@ async def print_delayed_updates():
         await asyncio.sleep(1)  # Use non-blocking sleep
         pairs_to_remove = []
         for pair, data in delayed_prints.items():
-            if time.time() - data['timestamp'] >= 20:
+            if time.time() - data['timestamp'] >= 50:
                 last_opportunity = last_arbitrage_opportunities[pair]
                 current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[
                                :-3]  # Include milliseconds in the output
-                print(f"*20 seconds after Update for {pair} at {current_time}:")
+                print(f"*50 seconds after Update for {pair} at {current_time}:")
                 print(f"Previous arbitrage opportunity: {last_opportunity['percentage_diff']:.2f}%")
                 print(f"Current price difference: {data['percentage_diff']:.2f}%")
                 print(f"Bybit price: {data['bybit_price']}, Binance price: {data['binance_price']}")
@@ -234,7 +259,7 @@ async def bybit_websocket():
             process_bybit_data(data)
 
 
-def print_statement():
+async def print_statement():
     # Set the start time
     start_time = time.time()
 
@@ -246,28 +271,24 @@ def print_statement():
 
     # Loop indefinitely
     while True:
-        # Wait for 10 minutes
-        time.sleep(600)
+        # Wait for 10 minutes using asyncio.sleep
+        await asyncio.sleep(600)
 
         # Print the statement
         count += 1
         print("Statement printed at {} and has been printed {} times.".format(datetime.now(), count))
 
 
-print_statement()
-
-
 async def main():
-    tasks = [
-        asyncio.create_task(binance_websocket()),
-        asyncio.create_task(bybit_websocket()),
-        asyncio.create_task(print_delayed_updates()),  # Add this task
-    ]
+    tasks = []
+
+    tasks.append(asyncio.create_task(binance_websocket()))
+    tasks.append(asyncio.create_task(bybit_websocket()))
+    tasks.append(asyncio.create_task(print_delayed_updates()))
+    tasks.append(asyncio.create_task(print_heartbeat()))
+    tasks.append(asyncio.create_task(print_statement()))  # Add this task
+
     await asyncio.gather(*tasks)
-    while True:
-        await asyncio.gather(*tasks)
-        await asyncio.sleep(1)
-        print_delayed_updates()
 
 
 if __name__ == "__main__":
