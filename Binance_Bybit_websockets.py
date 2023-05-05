@@ -190,8 +190,6 @@ async def calculate_arbitrage(pair):
 # Update websocket handling
 import random
 
-MAX_RECONNECT_TRIES = 10
-
 
 async def binance_websocket():
     uri = "wss://fstream.binance.com/ws"
