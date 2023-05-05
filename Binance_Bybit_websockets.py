@@ -164,7 +164,8 @@ async def print_delayed_updates():
         for pair, data in delayed_prints.items():
             if time.time() - data['timestamp'] >= 20:
                 last_opportunity = last_arbitrage_opportunities[pair]
-                current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]  # Include milliseconds in the output
+                current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[
+                               :-3]  # Include milliseconds in the output
                 print(f"*20 seconds after Update for {pair} at {current_time}:")
                 print(f"Previous arbitrage opportunity: {last_opportunity['percentage_diff']:.2f}%")
                 print(f"Current price difference: {data['percentage_diff']:.2f}%")
@@ -181,7 +182,8 @@ async def print_delayed_updates():
                 binance_price_change = ((data['binance_price'] - last_opportunity['binance_price']) / last_opportunity[
                     'binance_price']) * 100
 
-                print(f"Bybit price change: {bybit_price_change:.2f}%, Binance price change: {binance_price_change:.2f}%")
+                print(
+                    f"Bybit price change: {bybit_price_change:.2f}%, Binance price change: {binance_price_change:.2f}%")
 
                 # Identify which exchange created the arbitrage opportunity
                 if abs(bybit_price_change) > abs(binance_price_change):
@@ -195,7 +197,6 @@ async def print_delayed_updates():
 
         for pair in pairs_to_remove:
             delayed_prints.pop(pair)
-
 
 
 # Update websocket handling
@@ -233,6 +234,29 @@ async def bybit_websocket():
             process_bybit_data(data)
 
 
+def print_statement():
+    # Set the start time
+    start_time = time.time()
+
+    # Initialize a variable to keep track of the number of times the statement has been printed
+    count = 0
+
+    # Print the statement at the launch of the code
+    print("Code launched at", datetime.now())
+
+    # Loop indefinitely
+    while True:
+        # Wait for 10 minutes
+        time.sleep(600)
+
+        # Print the statement
+        count += 1
+        print("Statement printed at {} and has been printed {} times.".format(datetime.now(), count))
+
+
+print_statement()
+
+
 async def main():
     tasks = [
         asyncio.create_task(binance_websocket()),
@@ -244,6 +268,7 @@ async def main():
         await asyncio.gather(*tasks)
         await asyncio.sleep(1)
         print_delayed_updates()
+
 
 if __name__ == "__main__":
     asyncio.run(main())
