@@ -117,7 +117,7 @@ async def process_bybit_data(data):
     await calculate_arbitrage(pair)
 
 
-ARBITRAGE_THRESHOLD = 0.25
+ARBITRAGE_THRESHOLD = 0.15
 
 
 async def calculate_arbitrage(pair):
@@ -206,7 +206,8 @@ async def calculate_arbitrage(pair):
 
 # Update websocket handling
 async def binance_websocket():
-    uri = "wss://stream.binance.com:9443/stream"
+    combined_streams = "/".join([f"{pair.lower()}@bookTicker" for pair in selected_pairs])
+    uri = f"wss://stream.binance.com:9443/stream?streams={combined_streams}"
     max_retries = 5
     backoff_factor = 2
     current_retry = 0
@@ -214,14 +215,6 @@ async def binance_websocket():
     while current_retry <= max_retries:
         try:
             async with websockets.connect(uri, timeout=10) as websocket:
-                for pair in selected_pairs:
-                    payload = {
-                        "method": "SUBSCRIBE",
-                        "params": [f"{pair.lower()}@bookTicker"],
-                        "id": 1
-                    }
-                    await websocket.send(json.dumps(payload))
-
                 while True:
                     message = await websocket.recv()
                     data = json.loads(message)
