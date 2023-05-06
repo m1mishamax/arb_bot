@@ -16,6 +16,7 @@ def get_binance_pairs() -> List[str]:
     url = f"{API_BASE_BINANCE}/fapi/v1/exchangeInfo"
     response = requests.get(url)
     data = response.json()
+    # print(data)  # Add this print statement to see the API response
     return [symbol['symbol'] for symbol in data['symbols']]
 
 
@@ -87,7 +88,7 @@ def process_bybit_data(data):
 
 async def print_heartbeat():
     while True:
-        await asyncio.sleep(60*3)  # Print the heartbeat every 60*3 seconds
+        await asyncio.sleep(60 * 3)  # Print the heartbeat every 60*3 seconds
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         print(f"Heartbeat at {current_time}")
 
@@ -247,6 +248,7 @@ async def binance_websocket():
             print("Binance websocket connection cancelled. Reconnecting...")
             await asyncio.sleep(5)  # Sleep for 5 seconds before reconnecting
 
+
 async def bybit_websocket():
     uri = "wss://stream.bybit.com/realtime_public"
     while True:
@@ -266,7 +268,6 @@ async def bybit_websocket():
         except asyncio.CancelledError:
             print("Bybit websocket connection cancelled. Reconnecting...")
             await asyncio.sleep(5)  # Sleep for 5 seconds before reconnecting
-
 
 
 async def print_statement():
