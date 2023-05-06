@@ -5,6 +5,8 @@ import requests
 from typing import List
 from datetime import datetime
 import time
+from datetime import timezone
+
 
 # Constants
 API_BASE_BINANCE = "https://fapi.binance.com"
@@ -132,8 +134,9 @@ def calculate_arbitrage(pair):
     percentage_diff = ((bybit_price - binance_price) / binance_price) * 100
 
     if abs(percentage_diff) >= ARBITRAGE_THRESHOLD:
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]  # Include milliseconds in the output
-        print(f"Arbitrage opportunity for {pair}: {percentage_diff:.2f}% at {current_time}")
+        current_time = datetime.now(timezone.utc)
+        current_time_str = current_time.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        print(f"Arbitrage opportunity for {pair}: {percentage_diff:.2f}% at {current_time_str}")
         print(f"Bybit price: {bybit_price}, Binance price: {binance_price}")
         print(f"Bybit timestamp: {bybit_timestamp}, Binance timestamp: {binance_timestamp}")
         print(f"Timestamp difference: {abs((bybit_timestamp - binance_timestamp).total_seconds()) * 1000} ms")
@@ -170,8 +173,9 @@ def calculate_arbitrage(pair):
                 'percentage_diff': percentage_diff,
                 'timestamp': time.time(),
             }
-            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]  # Include milliseconds in the output
-            print(f"Update for {pair} at {current_time}:")
+            current_time = datetime.now(timezone.utc)
+            current_time_str = current_time.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+            print(f"Update for {pair} at {current_time_str}:")
             print(f"Previous arbitrage opportunity: {last_opportunity['percentage_diff']:.2f}%")
             print(f"Current price difference: {percentage_diff:.2f}%")
             print(f"Bybit price: {bybit_price}, Binance price: {binance_price}")
@@ -197,9 +201,9 @@ async def print_delayed_updates():
         for pair, data in delayed_prints.items():
             if time.time() - data['timestamp'] >= 50:
                 last_opportunity = last_arbitrage_opportunities[pair]
-                current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[
-                               :-3]  # Include milliseconds in the output
-                print(f"*50 seconds after Update for {pair} at {current_time}:")
+                current_time = datetime.now(timezone.utc)
+                current_time_str = current_time.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+                print(f"*50 seconds after Update for {pair} at {current_time_str}:")
                 print(f"Previous arbitrage opportunity: {last_opportunity['percentage_diff']:.2f}%")
                 print(f"Current price difference: {data['percentage_diff']:.2f}%")
                 print(f"Bybit price: {data['bybit_price']}, Binance price: {data['binance_price']}")
