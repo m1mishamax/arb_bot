@@ -95,7 +95,7 @@ def process_bybit_data(data):
 
 async def print_heartbeat():
     while True:
-        await asyncio.sleep(60 * 3)  # Print the heartbeat every 60*3 seconds
+        await asyncio.sleep(60 * 15)  # Print the heartbeat every 60*3 seconds
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         print(f"Heartbeat at {current_time}")
 
@@ -114,7 +114,7 @@ async def print_heartbeat():
         print()
 
 
-ARBITRAGE_THRESHOLD = 0.27
+ARBITRAGE_THRESHOLD = 0.40
 
 
 def calculate_arbitrage(pair):
