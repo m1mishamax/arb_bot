@@ -9,6 +9,7 @@ import time
 # Constants
 API_BASE_BINANCE = "https://fapi.binance.com"
 API_BASE_BYBIT = "https://api.bybit.com"
+ignored_tokens = ['1000PEPEUSDT']
 
 
 # REST API calls to get trading pairs
@@ -16,8 +17,14 @@ def get_binance_pairs() -> List[str]:
     url = f"{API_BASE_BINANCE}/fapi/v1/exchangeInfo"
     response = requests.get(url)
     data = response.json()
-    # print(data)  # Add this print statement to see the API response
-    return [symbol['symbol'] for symbol in data['symbols']]
+
+    filtered_symbols = []
+    for symbol in data['symbols']:
+        if not any(token in symbol['symbol'] for token in ignored_tokens):
+            filtered_symbols.append(symbol['symbol'])
+
+    return filtered_symbols[:200]  # Limit to the first 200 symbols after filtering
+
 
 
 def get_bybit_pairs() -> List[str]:
