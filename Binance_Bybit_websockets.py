@@ -3,10 +3,8 @@ import websockets
 import json
 import requests
 from typing import List
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import time
-from datetime import timezone
-
 
 # Constants
 API_BASE_BINANCE = "https://fapi.binance.com"
@@ -26,7 +24,6 @@ def get_binance_pairs() -> List[str]:
             filtered_symbols.append(symbol['symbol'])
 
     return filtered_symbols[:200]  # Limit to the first 200 symbols after filtering
-
 
 
 def get_bybit_pairs() -> List[str]:
@@ -71,7 +68,8 @@ def process_binance_data(data):
 
     pair = data['s']
     price = float(data['p'])
-    timestamp = datetime.utcfromtimestamp(data['E'] / 1000)  # Convert to seconds with milliseconds
+    seconds, milliseconds = divmod(data['E'], 1000)
+    timestamp = datetime.utcfromtimestamp(seconds) + timedelta(milliseconds=milliseconds)
     latest_prices[pair]['binance'].pop(0)  # Remove the oldest price data
     latest_prices[pair]['binance'].append({'price': price, 'timestamp': timestamp})  # Add the new price data
     last_received_timestamps[pair]['binance'] = timestamp  # Store the timestamp of the received data
@@ -128,18 +126,27 @@ def calculate_arbitrage(pair):
 
     bybit_price = bybit_data['price']
     binance_price = binance_data['price']
-    bybit_timestamp = bybit_data['timestamp']
-    binance_timestamp = binance_data['timestamp']
+    bybit_timestamp = latest_prices[pair]['bybit'][-1]['timestamp'].replace(tzinfo=timezone.utc)
+    binance_timestamp = latest_prices[pair]['binance'][-1]['timestamp'].replace(tzinfo=timezone.utc)
+    bybit_timestamp_str = bybit_timestamp.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    binance_timestamp_str = binance_timestamp.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
 
     percentage_diff = ((bybit_price - binance_price) / binance_price) * 100
 
+    current_time = datetime.now(timezone.utc)
+    current_time_str = current_time.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    bybit_diff_local = abs((bybit_timestamp - current_time).total_seconds()) * 1000
+    binance_diff_local = abs((binance_timestamp - current_time).total_seconds()) * 1000
+    average_diff_local = (bybit_diff_local + binance_diff_local) / 2
     if abs(percentage_diff) >= ARBITRAGE_THRESHOLD:
-        current_time = datetime.now(timezone.utc)
-        current_time_str = current_time.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+
         print(f"Arbitrage opportunity for {pair}: {percentage_diff:.2f}% at {current_time_str}")
         print(f"Bybit price: {bybit_price}, Binance price: {binance_price}")
-        print(f"Bybit timestamp: {bybit_timestamp}, Binance timestamp: {binance_timestamp}")
-        print(f"Timestamp difference: {abs((bybit_timestamp - binance_timestamp).total_seconds()) * 1000} ms")
+        print(f"Bybit timestamp: {bybit_timestamp_str}, Binance timestamp: {binance_timestamp_str}")
+
+        # print(f"Bybit local time difference: {bybit_diff_local} ms")
+        # print(f"Binance local time difference: {binance_diff_local} ms")
+        print(f"Average local time difference: {average_diff_local} ms")
 
         # Calculate price change between previous and current price for both exchanges
         bybit_prev_data = latest_prices[pair]['bybit'][0]
@@ -173,14 +180,12 @@ def calculate_arbitrage(pair):
                 'percentage_diff': percentage_diff,
                 'timestamp': time.time(),
             }
-            current_time = datetime.now(timezone.utc)
-            current_time_str = current_time.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
             print(f"Update for {pair} at {current_time_str}:")
             print(f"Previous arbitrage opportunity: {last_opportunity['percentage_diff']:.2f}%")
             print(f"Current price difference: {percentage_diff:.2f}%")
             print(f"Bybit price: {bybit_price}, Binance price: {binance_price}")
-            print(f"Bybit timestamp: {bybit_timestamp}, Binance timestamp: {binance_timestamp}")
-            print(f"Timestamp difference: {abs((bybit_timestamp - binance_timestamp).total_seconds()) * 1000} ms")
+            print(f"Bybit timestamp: {bybit_timestamp_str}, Binance timestamp: {binance_timestamp_str}")
+            print(f"Average local time difference: {average_diff_local} ms")
 
             # Calculate price change between previous and current price for both exchanges
             bybit_price_change = ((bybit_price - last_opportunity['bybit_price']) / last_opportunity[
@@ -203,15 +208,27 @@ async def print_delayed_updates():
                 last_opportunity = last_arbitrage_opportunities[pair]
                 current_time = datetime.now(timezone.utc)
                 current_time_str = current_time.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+                timestamp_difference = abs((latest_prices[pair]['bybit'][-1]['timestamp'] -
+                                            latest_prices[pair]['binance'][-1]['timestamp']).total_seconds()) * 1000
+                bybit_timestamp = latest_prices[pair]['bybit'][-1]['timestamp'].replace(tzinfo=timezone.utc)
+                binance_timestamp = latest_prices[pair]['binance'][-1]['timestamp'].replace(tzinfo=timezone.utc)
+                bybit_timestamp_str = latest_prices[pair]['bybit'][-1]['timestamp'].strftime("%Y-%m-%d %H:%M:%S.%f")[
+                                      :-3]
+                binance_timestamp_str = latest_prices[pair]['binance'][-1]['timestamp'].strftime(
+                    "%Y-%m-%d %H:%M:%S.%f")[:-3]
+
+                bybit_diff_local = abs((bybit_timestamp - current_time).total_seconds()) * 1000
+                binance_diff_local = abs((binance_timestamp - current_time).total_seconds()) * 1000
+                average_diff_local = (bybit_diff_local + binance_diff_local) / 2
+
                 print(f"*50 seconds after Update for {pair} at {current_time_str}:")
                 print(f"Previous arbitrage opportunity: {last_opportunity['percentage_diff']:.2f}%")
                 print(f"Current price difference: {data['percentage_diff']:.2f}%")
                 print(f"Bybit price: {data['bybit_price']}, Binance price: {data['binance_price']}")
                 print(
-                    f"Bybit timestamp: {latest_prices[pair]['bybit'][-1]['timestamp']}, Binance timestamp: {latest_prices[pair]['binance'][-1]['timestamp']}")
-                timestamp_difference = abs((latest_prices[pair]['bybit'][-1]['timestamp'] -
-                                            latest_prices[pair]['binance'][-1]['timestamp']).total_seconds()) * 1000
-                print(f"Timestamp difference: {timestamp_difference} ms")
+                    f"Bybit timestamp: {bybit_timestamp_str}, Binance timestamp: {binance_timestamp_str}")
+
+                print(f"Average local time difference: {average_diff_local} ms")
 
                 # Calculate price change between previous and current price for both exchanges
                 bybit_price_change = ((data['bybit_price'] - last_opportunity['bybit_price']) / last_opportunity[
