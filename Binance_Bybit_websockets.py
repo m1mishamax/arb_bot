@@ -95,7 +95,7 @@ def process_bybit_data(data):
 
 async def print_heartbeat():
     while True:
-        await asyncio.sleep(60 * 15)  # Print the heartbeat every 60*3 seconds
+        await asyncio.sleep(60 * 10)  # Print the heartbeat every 600 seconds (10 minutes)
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         print(f"Heartbeat at {current_time}")
 
