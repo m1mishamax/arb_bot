@@ -27,9 +27,41 @@ binance = ccxt.binance({
 ARBITRAGE_THRESHOLD = 0.20
 MAX_POSITIONS_PER_PAIR = 2
 MAX_TOTAL_POSITIONS = 6
-PERCENT_ACCEPTANCE = 0.03
+PERCENT_ACCEPTANCE = 0.1
 
 open_positions = {}
+
+
+def close_position(symbol, long_exchange, short_exchange, amount):
+    if symbol not in open_positions:
+        print(f"No open positions found for {symbol}")
+        return
+
+    position_to_close = None
+    for position in open_positions[symbol]:
+        if position["long_exchange"] == long_exchange and position["short_exchange"] == short_exchange:
+            position_to_close = position
+            break
+
+    if position_to_close is None:
+        print(f"No matching position found for {symbol}")
+        return
+
+    if long_exchange == "binance":
+        # long_order = place_binance_order(symbol, "sell", amount)
+        # short_order = place_bybit_order(symbol, "buy", amount)
+        pass
+    else:
+        # long_order = place_bybit_order(symbol, "sell", amount)
+        # short_order = place_binance_order(symbol, "buy", amount)
+        pass
+    # if long_order and short_order:
+    if True:
+        position_to_close["close_time"] = datetime.now(timezone.utc)
+        open_positions[symbol].remove(position_to_close)
+        print(f"Closed position: long on {long_exchange}, short on {short_exchange}")
+    else:
+        print("Failed to close position")
 
 
 def display_open_positions():
@@ -44,7 +76,7 @@ def display_open_positions():
 
 def write_open_positions_to_csv(filename="open_positions.csv"):
     with open(filename, mode="w", newline="") as csvfile:
-        fieldnames = ["symbol", "long_exchange", "short_exchange", "amount"]
+        fieldnames = ["symbol", "long_exchange", "short_exchange", "amount", "open_time"]  # Add open_time here
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
         writer.writeheader()
@@ -52,6 +84,7 @@ def write_open_positions_to_csv(filename="open_positions.csv"):
             for position in positions:
                 position_data = position.copy()
                 position_data["symbol"] = symbol
+                position_data["open_time"] = position_data["open_time"].strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
                 writer.writerow(position_data)
 
 
@@ -111,7 +144,8 @@ def execute_arbitrage_trade(symbol, long_exchange, short_exchange, amount):
             open_positions[symbol].append({
                 "long_exchange": long_exchange,
                 "short_exchange": short_exchange,
-                "amount": amount
+                "amount": amount,
+                "open_time": datetime.now(timezone.utc)
             })
             print(f"Arbitrage trade executed: long on {long_exchange}, short on {short_exchange}")
             print()
@@ -153,6 +187,18 @@ def calculate_arbitrage(pair, latest_prices, last_arbitrage_opportunities, delay
     bybit_diff_local = abs((bybit_timestamp - current_time).total_seconds()) * 1000
     binance_diff_local = abs((binance_timestamp - current_time).total_seconds()) * 1000
     average_diff_local = (bybit_diff_local + binance_diff_local) / 2
+
+    # Inside the calculate_arbitrage function
+    if 0 <= abs(percentage_diff) <= PERCENT_ACCEPTANCE:
+
+        # Find the corresponding long and short exchanges for the open position
+        if pair in open_positions:
+            for position in open_positions[pair]:
+                # do something with position
+                close_position(pair, position['long_exchange'], position['short_exchange'], position['amount'])
+                print('test', position)
+                print(f"Closing position for {pair} as price difference is {percentage_diff:.2f}%")
+
     if abs(percentage_diff) >= ARBITRAGE_THRESHOLD:
 
         print(f"Arbitrage opportunity for {pair}: {percentage_diff:.2f}% at {current_time_str}")
