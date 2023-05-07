@@ -24,10 +24,10 @@ binance = ccxt.binance({
 })
 
 # arbitrage_calculator.py
-ARBITRAGE_THRESHOLD = 0.20
+ARBITRAGE_THRESHOLD = 0.40
 MAX_POSITIONS_PER_PAIR = 2
 MAX_TOTAL_POSITIONS = 6
-PERCENT_ACCEPTANCE = 0.1
+PERCENT_ACCEPTANCE = 0.03
 
 open_positions = {}
 
@@ -60,6 +60,10 @@ def close_position(symbol, long_exchange, short_exchange, amount):
         position_to_close["close_time"] = datetime.now(timezone.utc)
         open_positions[symbol].remove(position_to_close)
         print(f"Closed position: long on {long_exchange}, short on {short_exchange}")
+        write_open_positions_to_csv()
+        write_trading_history_to_csv("trade_closed", symbol, long_exchange, short_exchange, amount,
+                                     datetime.now(timezone.utc))
+
     else:
         print("Failed to close position")
 
@@ -72,6 +76,28 @@ def display_open_positions():
             for i, position in enumerate(positions, start=1):
                 print(
                     f"  {i}. Long on {position['long_exchange']}, short on {position['short_exchange']}, amount: {position['amount']}")
+
+
+def write_trading_history_to_csv(trade_type, symbol, long_exchange, short_exchange, amount, timestamp, filename="trading_history.csv"):
+    with open(filename, mode="a", newline="") as csvfile:
+        fieldnames = ["trade_type", "symbol", "long_exchange", "short_exchange", "amount", "timestamp"]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+        # Write header only if the file is empty
+        if csvfile.tell() == 0:
+            writer.writeheader()
+
+        trade_data = {
+            "trade_type": trade_type,
+            "symbol": symbol,
+            "long_exchange": long_exchange,
+            "short_exchange": short_exchange,
+            "amount": amount,
+            "timestamp": timestamp.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+        }
+        writer.writerow(trade_data)
+
+
 
 
 def write_open_positions_to_csv(filename="open_positions.csv"):
@@ -148,6 +174,8 @@ def execute_arbitrage_trade(symbol, long_exchange, short_exchange, amount):
                 "open_time": datetime.now(timezone.utc)
             })
             print(f"Arbitrage trade executed: long on {long_exchange}, short on {short_exchange}")
+            write_trading_history_to_csv("trade_open", symbol, long_exchange, short_exchange, amount,
+                                         datetime.now(timezone.utc))
             print()
         else:
             print("Failed to execute arbitrage trade")
