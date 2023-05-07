@@ -1,9 +1,134 @@
 from datetime import datetime, timedelta, timezone
 import time
+import ccxt  # API for accessing Bybit and Binance exchanges
+import csv
 
+# Initialize the API clients for Bybit and Binance exchanges
+bybit = ccxt.bybit({
+    'enableRateLimit': True,
+    'options': {
+        'defaultType': 'future',
+    },
+    'rateLimit': 2000,  # Bybit allows 50 requests per second
+    'apiKey': 'TT6Hq7UlERJFiOYUy2ilrz2qFU2KTS6MBAU8Ca3v6tbEgMtu5GyEhtlhcyUgFzAd',
+    'secret': 'HZqhoK14NHEMOZrOmYMThK9SDXKhoQ72ZZdYAhDevw8i31ZF04qUwL5kfMLDZlKk',
+})
+binance = ccxt.binance({
+    'enableRateLimit': True,
+    'options': {
+        'defaultType': 'future',
+    },
+    'rateLimit': 2000,  # Binance allows 1200 requests per minute
+    'apiKey': 'un8gN8r1sJuvEWQ9wD',
+    'secret': 'oBtFDAlJtmLFoHTdt8P80GTpYO6FBEEmMztD',
+})
 
 # arbitrage_calculator.py
-ARBITRAGE_THRESHOLD = 0.40
+ARBITRAGE_THRESHOLD = 0.20
+MAX_POSITIONS_PER_PAIR = 2
+MAX_TOTAL_POSITIONS = 6
+PERCENT_ACCEPTANCE = 0.03
+
+open_positions = {}
+
+
+def display_open_positions():
+    print("\nCurrent open positions:")
+    for symbol, positions in open_positions.items():
+        if len(positions) > 0:
+            print(f"{symbol}: {len(positions)} open trades")
+            for i, position in enumerate(positions, start=1):
+                print(
+                    f"  {i}. Long on {position['long_exchange']}, short on {position['short_exchange']}, amount: {position['amount']}")
+
+
+def write_open_positions_to_csv(filename="open_positions.csv"):
+    with open(filename, mode="w", newline="") as csvfile:
+        fieldnames = ["symbol", "long_exchange", "short_exchange", "amount"]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+        writer.writeheader()
+        for symbol, positions in open_positions.items():
+            for position in positions:
+                position_data = position.copy()
+                position_data["symbol"] = symbol
+                writer.writerow(position_data)
+
+
+def place_binance_order(symbol, side, amount, price=None):
+    symbol = symbol.replace('-', '')  # remove dash from symbol
+    order_type = 'limit' if price else 'market'
+    try:
+        order = binance.create_order(
+            symbol,
+            type=order_type,
+            side=side,
+            amount=amount,
+            price=price,
+            params={'timeInForce': 'GTC'}
+        )
+        return order
+    except Exception as e:
+        print(f"Binance order error: {e}")
+        return None
+
+
+def place_bybit_order(symbol, side, amount, price=None):
+    order_type = 'Limit' if price else 'Market'
+    try:
+        order = bybit.create_order(
+            symbol,
+            type=order_type,
+            side=side,
+            amount=amount,
+            price=price,
+            params={'time_in_force': 'GoodTillCancel'}
+        )
+        return order
+    except Exception as e:
+        print(f"Bybit order error: {e}")
+        return None
+
+
+def execute_arbitrage_trade(symbol, long_exchange, short_exchange, amount):
+    if symbol not in open_positions:
+        open_positions[symbol] = []
+
+    positions_per_pair = len(open_positions[symbol])
+    total_positions = sum(len(positions) for positions in open_positions.values())
+
+    if positions_per_pair < MAX_POSITIONS_PER_PAIR and total_positions < MAX_TOTAL_POSITIONS:
+        if long_exchange == "binance":
+            # long_order = place_binance_order(symbol, "buy", amount)
+            # short_order = place_bybit_order(symbol, "sell", amount)
+            pass
+        else:
+            # long_order = place_bybit_order(symbol, "buy", amount)
+            # short_order = place_binance_order(symbol, "sell", amount)
+            pass
+        # if long_order and short_order: add it back later
+        if True:
+            open_positions[symbol].append({
+                "long_exchange": long_exchange,
+                "short_exchange": short_exchange,
+                "amount": amount
+            })
+            print(f"Arbitrage trade executed: long on {long_exchange}, short on {short_exchange}")
+            print()
+        else:
+            print("Failed to execute arbitrage trade")
+    else:
+        limits_reached = []
+        if positions_per_pair >= MAX_POSITIONS_PER_PAIR:
+            limits_reached.append(f"maximum positions per pair ({MAX_POSITIONS_PER_PAIR})")
+        if total_positions >= MAX_TOTAL_POSITIONS:
+            limits_reached.append(f"maximum total positions ({MAX_TOTAL_POSITIONS})")
+
+        limits_str = " and ".join(limits_reached)
+        print(f"Cannot execute arbitrage trade for {symbol}: reached {limits_str}.")
+        print(f"Open trades for {symbol}: {positions_per_pair}")
+        display_open_positions()
+        write_open_positions_to_csv()
 
 
 def calculate_arbitrage(pair, latest_prices, last_arbitrage_opportunities, delayed_prints):
@@ -62,6 +187,7 @@ def calculate_arbitrage(pair, latest_prices, last_arbitrage_opportunities, delay
             'percentage_diff': percentage_diff,
             'printed': False
         }
+
     else:
         if pair in last_arbitrage_opportunities and not last_arbitrage_opportunities[pair]['printed']:
             last_opportunity = last_arbitrage_opportunities[pair]
@@ -89,3 +215,16 @@ def calculate_arbitrage(pair, latest_prices, last_arbitrage_opportunities, delay
             print()
 
             last_arbitrage_opportunities[pair]['printed'] = True
+
+    if abs(percentage_diff) >= ARBITRAGE_THRESHOLD:
+        print(
+            f"{current_time_str}: ARBITRAGE OPPORTUNITY DETECTED: {pair} {binance_price} (Binance) vs {bybit_price} (Bybit) - {percentage_diff}%")
+        # Execute the arbitrage trade
+        amount = 0.01  # Define the amount to trade, you can use a more sophisticated approach
+        if binance_price < bybit_price:
+            # print('execute_arbitrage_trade(pair, "binance", "bybit", amount)')
+            execute_arbitrage_trade(pair, 'binance', 'bybit', '10')
+
+        else:
+            # print('execute_arbitrage_trade(pair, "bybit", "binance", amount)')
+            execute_arbitrage_trade(pair, 'bybit', 'binance', '10')
