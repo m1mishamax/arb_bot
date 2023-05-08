@@ -5,8 +5,7 @@ import requests
 from typing import List
 from datetime import datetime, timedelta, timezone
 import time
-from arbitrage_calculator import calculate_arbitrage
-
+from arbitrage_calculator import calculate_arbitrage, process_arbitrage_data
 
 # Constants
 API_BASE_BINANCE = "https://fapi.binance.com"
@@ -54,45 +53,81 @@ filtered_volumes = [pair for pair in binance_volumes if pair['symbol'] in matchi
 sorted_volumes = sorted(filtered_volumes, key=lambda x: float(x['quoteVolume']))
 selected_pairs = [pair['symbol'] for pair in sorted_volumes[:200]]
 
-# Store latest mark prices
-latest_prices = {pair: {'binance': [None, None], 'bybit': [None, None]} for pair in selected_pairs}
+# Remove the first latest_prices initialization
+# latest_prices = {pair: {'binance': [None, None], 'bybit': [None, None]} for pair in selected_pairs}
+
 # Store last known arbitrage opportunities
 last_arbitrage_opportunities = {}
 # Store delayed prints
 delayed_prints = {}
-# Add this after the line where latest_prices is defined
+
+# Initialize the latest_prices dictionary with None values
+latest_prices = {pair: {'binance': [{'bid_price': None, 'ask_price': None, 'timestamp': None}],
+                        'bybit': [{'bid_price': None, 'ask_price': None, 'timestamp': None}]} for pair in
+                 selected_pairs}
+
 last_received_timestamps = {pair: {'binance': None, 'bybit': None} for pair in selected_pairs}
 
 
 def process_binance_data(data):
-    if 's' not in data or 'p' not in data or 'E' not in data:
+    if 's' not in data or 'b' not in data or 'a' not in data or 'E' not in data:
         return
 
     pair = data['s']
-    price = float(data['p'])
+    bid_price = float(data['b'])
+    ask_price = float(data['a'])
     seconds, milliseconds = divmod(data['E'], 1000)
     timestamp = datetime.utcfromtimestamp(seconds) + timedelta(milliseconds=milliseconds)
     latest_prices[pair]['binance'].pop(0)  # Remove the oldest price data
-    latest_prices[pair]['binance'].append({'price': price, 'timestamp': timestamp})  # Add the new price data
+    latest_prices[pair]['binance'].append(
+        {'bid_price': bid_price, 'ask_price': ask_price, 'timestamp': timestamp})  # Add the new price data
     last_received_timestamps[pair]['binance'] = timestamp  # Store the timestamp of the received data
-    calculate_arbitrage(pair, latest_prices, last_arbitrage_opportunities, delayed_prints)
+    # print('process_binance_data', pair, latest_prices, last_arbitrage_opportunities, delayed_prints)
+    # print('Binance', pair, timestamp.strftime(
+    #     "%Y-%m-%d %H:%M:%S.%f"))
+    process_arbitrage_data(pair, latest_prices, last_arbitrage_opportunities, delayed_prints)
 
 
 def process_bybit_data(data):
-    if 'data' not in data or 'update' not in data['data']:
+    if 'topic' not in data or 'data' not in data:
+        return
+    # print("Bybit raw data:", data)
+    pair = data['topic'].split('.')[2]
+    # timestamp = data['timestamp_e6']
+    # print(timestamp)
+    timestamp = datetime.utcfromtimestamp(int(data['timestamp_e6']) / 1_000_000)
+    if data['type'] == 'snapshot':
+        return  # Ignore snapshot data
+    elif data['type'] == 'delta':
+        bid_price = float(data['data']['update'][0]['bid1_price']) if 'bid1_price' in data['data']['update'][
+            0] else None
+        ask_price = float(data['data']['update'][0]['ask1_price']) if 'ask1_price' in data['data']['update'][
+            0] else None
+    else:
         return
 
-    update_data = data['data']['update'][0]
-    if 'symbol' not in update_data or 'mark_price' not in update_data or 'timestamp_e6' not in data:
-        return
+    # print(f"Before popping data: {latest_prices[pair]['bybit']}")  # Add this print statement
+    if len(latest_prices[pair]['bybit']) > 1:
+        latest_prices[pair]['bybit'].pop(0)  # Remove the oldest price data
 
-    pair = update_data['symbol']
-    price = float(update_data['mark_price'])
-    timestamp = datetime.utcfromtimestamp(int(data['timestamp_e6']) / 1000000)  # Convert to seconds with milliseconds
-    latest_prices[pair]['bybit'].pop(0)  # Remove the oldest price data
-    latest_prices[pair]['bybit'].append({'price': price, 'timestamp': timestamp})  # Add the new price data
+    # print(f"After popping data: {latest_prices[pair]['bybit']}")  # Add this print statement
+
+    # Use the last known prices if not updated in this update
+    if bid_price is None:
+        bid_price = latest_prices[pair]['bybit'][-1]['bid_price']
+
+    if ask_price is None:
+        ask_price = latest_prices[pair]['bybit'][-1]['ask_price']
+
+    latest_prices[pair]['bybit'].append(
+        {'bid_price': bid_price, 'ask_price': ask_price, 'timestamp': timestamp})  # Add the new price data
     last_received_timestamps[pair]['bybit'] = timestamp  # Store the timestamp of the received data
-    calculate_arbitrage(pair, latest_prices, last_arbitrage_opportunities, delayed_prints)
+    # print(pair, last_received_timestamps[pair]['bybit'])
+    # print('Bybit',pair,timestamp.strftime(
+    #                 "%Y-%m-%d %H:%M:%S.%f"))
+
+
+    process_arbitrage_data(pair, latest_prices, last_arbitrage_opportunities, delayed_prints)
 
 
 async def print_heartbeat():
@@ -114,12 +149,6 @@ async def print_heartbeat():
                 print(f"{pair} Bybit: {bybit_diff:.2f}s since last update")
 
         print()
-
-
-
-
-
-
 
 
 async def print_delayed_updates():
@@ -176,35 +205,35 @@ async def print_delayed_updates():
             delayed_prints.pop(pair)
 
 
-# Update websocket handling
 async def binance_websocket():
     uri = "wss://fstream.binance.com/ws"
     while True:
         try:
-            async with websockets.connect(uri) as websocket:
+            async with websockets.connect(uri, ping_interval=10) as websocket:
                 for pair in selected_pairs:
                     payload = {
                         "method": "SUBSCRIBE",
-                        "params": [f"{pair.lower()}@markPrice"],
+                        "params": [f"{pair.lower()}@bookTicker"],
                         "id": 1
                     }
                     await websocket.send(json.dumps(payload))
-                    await asyncio.sleep(0.2)  # Add a 200 ms delay between subscription requests
+                    await asyncio.sleep(0.2)
 
                 while True:
                     message = await websocket.recv()
                     data = json.loads(message)
+                    # print(data)
                     process_binance_data(data)
-        except asyncio.CancelledError:
-            print("Binance websocket connection cancelled. Reconnecting...")
-            await asyncio.sleep(5)  # Sleep for 5 seconds before reconnecting
+        except Exception as e:
+            print(f"Binance websocket connection error: {e}. Reconnecting...")
+            await asyncio.sleep(5)
 
 
 async def bybit_websocket():
     uri = "wss://stream.bybit.com/realtime_public"
     while True:
         try:
-            async with websockets.connect(uri) as websocket:
+            async with websockets.connect(uri, ping_interval=30) as websocket:
                 for pair in selected_pairs:
                     payload = {
                         "op": "subscribe",
@@ -215,9 +244,15 @@ async def bybit_websocket():
                 while True:
                     message = await websocket.recv()
                     data = json.loads(message)
+                    # print(f"Received data from Bybit websocket: {data}")  # Add this print statement here
                     process_bybit_data(data)
+
         except asyncio.CancelledError:
             print("Bybit websocket connection cancelled. Reconnecting...")
+            await asyncio.sleep(5)  # Sleep for 5 seconds before reconnecting
+
+        except websockets.exceptions.ConnectionClosedError as e:
+            print(f"Bybit websocket connection error: {e}. Reconnecting...")
             await asyncio.sleep(5)  # Sleep for 5 seconds before reconnecting
 
 

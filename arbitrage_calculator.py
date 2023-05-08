@@ -24,7 +24,7 @@ binance = ccxt.binance({
 })
 
 # arbitrage_calculator.py
-ARBITRAGE_THRESHOLD = 0.40
+ARBITRAGE_THRESHOLD = 0.10
 MAX_POSITIONS_PER_PAIR = 2
 MAX_TOTAL_POSITIONS = 6
 PERCENT_ACCEPTANCE = 0.03
@@ -78,7 +78,8 @@ def display_open_positions():
                     f"  {i}. Long on {position['long_exchange']}, short on {position['short_exchange']}, amount: {position['amount']}")
 
 
-def write_trading_history_to_csv(trade_type, symbol, long_exchange, short_exchange, amount, timestamp, filename="trading_history.csv"):
+def write_trading_history_to_csv(trade_type, symbol, long_exchange, short_exchange, amount, timestamp,
+                                 filename="trading_history.csv"):
     with open(filename, mode="a", newline="") as csvfile:
         fieldnames = ["trade_type", "symbol", "long_exchange", "short_exchange", "amount", "timestamp"]
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -96,8 +97,6 @@ def write_trading_history_to_csv(trade_type, symbol, long_exchange, short_exchan
             "timestamp": timestamp.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
         }
         writer.writerow(trade_data)
-
-
 
 
 def write_open_positions_to_csv(filename="open_positions.csv"):
@@ -193,23 +192,63 @@ def execute_arbitrage_trade(symbol, long_exchange, short_exchange, amount):
         write_open_positions_to_csv()
 
 
+def process_arbitrage_data(pair, latest_prices, last_arbitrage_opportunities, delayed_prints):
+    # print(pair, latest_prices, last_arbitrage_opportunities, delayed_prints)
+    binance_data = latest_prices[pair]['binance'][0]
+    bybit_data = latest_prices[pair]['bybit'][0]
+    # print(pair, binance_data, bybit_data, delayed_prints)
+    if (binance_data['bid_price'] is None or binance_data['ask_price'] is None or
+            bybit_data['bid_price'] is None or bybit_data['ask_price'] is None):
+        return
+
+    if binance_data is None or bybit_data is None:
+        return
+    # if pair == 'STMXUSDT':
+    #     print(pair, binance_data, bybit_data)
+    # Compare Binance's ask price with Bybit's bid price
+    modified_prices = {
+        pair: {
+            'binance': {'price': binance_data['ask_price'], 'timestamp': binance_data['timestamp']},
+            'bybit': {'price': bybit_data['bid_price'], 'timestamp': bybit_data['timestamp']}
+        }
+    }
+    # print(modified_prices)
+    calculate_arbitrage(pair, modified_prices, last_arbitrage_opportunities, delayed_prints)
+
+    # Compare Binance's bid price with Bybit's ask price
+    modified_prices = {
+        pair: {
+            'binance': {'price': binance_data['bid_price'], 'timestamp': binance_data['timestamp']},
+            'bybit': {'price': bybit_data['ask_price'], 'timestamp': bybit_data['timestamp']}
+        }
+    }
+    # print(modified_prices)
+    calculate_arbitrage(pair, modified_prices, last_arbitrage_opportunities, delayed_prints)
+
+
 def calculate_arbitrage(pair, latest_prices, last_arbitrage_opportunities, delayed_prints):
+    # print('latest_prices',latest_prices)
     # The function implementation remains the same
-    bybit_data = latest_prices[pair]['bybit'][-1]
-    binance_data = latest_prices[pair]['binance'][-1]
+    # print(latest_prices[pair]['bybit'])
+
+    bybit_data = latest_prices[pair]['bybit']
+    binance_data = latest_prices[pair]['binance']
 
     if bybit_data is None or binance_data is None:
         return
 
     bybit_price = bybit_data['price']
+    # print(bybit_price)
     binance_price = binance_data['price']
-    bybit_timestamp = latest_prices[pair]['bybit'][-1]['timestamp'].replace(tzinfo=timezone.utc)
-    binance_timestamp = latest_prices[pair]['binance'][-1]['timestamp'].replace(tzinfo=timezone.utc)
+    # print(binance_price)
+    # print(latest_prices[pair]['bybit']['timestamp'].replace(tzinfo=timezone.utc),'testaks')
+    bybit_timestamp = latest_prices[pair]['bybit']['timestamp'].replace(tzinfo=timezone.utc)
+    binance_timestamp = latest_prices[pair]['binance']['timestamp'].replace(tzinfo=timezone.utc)
     bybit_timestamp_str = bybit_timestamp.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
     binance_timestamp_str = binance_timestamp.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
 
     percentage_diff = ((bybit_price - binance_price) / binance_price) * 100
-
+    # print(percentage_diff)
     current_time = datetime.now(timezone.utc)
     current_time_str = current_time.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
     bybit_diff_local = abs((bybit_timestamp - current_time).total_seconds()) * 1000
@@ -218,7 +257,7 @@ def calculate_arbitrage(pair, latest_prices, last_arbitrage_opportunities, delay
 
     # Inside the calculate_arbitrage function
     if 0 <= abs(percentage_diff) <= PERCENT_ACCEPTANCE:
-
+        # print('testaaaaaaaaaaaa')
         # Find the corresponding long and short exchanges for the open position
         if pair in open_positions:
             for position in open_positions[pair]:
@@ -236,10 +275,10 @@ def calculate_arbitrage(pair, latest_prices, last_arbitrage_opportunities, delay
         # print(f"Bybit local time difference: {bybit_diff_local} ms")
         # print(f"Binance local time difference: {binance_diff_local} ms")
         print(f"Average local time difference: {average_diff_local} ms")
-
+        # print('test1117',latest_prices[pair]['bybit'],latest_prices[pair]['binance'])
         # Calculate price change between previous and current price for both exchanges
-        bybit_prev_data = latest_prices[pair]['bybit'][0]
-        binance_prev_data = latest_prices[pair]['binance'][0]
+        bybit_prev_data = latest_prices[pair]['bybit']
+        binance_prev_data = latest_prices[pair]['binance']
 
         if bybit_prev_data is not None and binance_prev_data is not None:
             bybit_price_change = ((bybit_price - bybit_prev_data['price']) / bybit_prev_data['price']) * 100
