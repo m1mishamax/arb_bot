@@ -5,7 +5,7 @@ import requests
 from typing import List
 from datetime import datetime, timedelta, timezone
 import time
-from arbitrage_calculator import calculate_arbitrage, process_arbitrage_data
+from arbitrage_calculator import process_arbitrage_data
 
 # Constants
 API_BASE_BINANCE = "https://fapi.binance.com"
