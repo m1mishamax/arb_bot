@@ -24,10 +24,10 @@ binance = ccxt.binance({
 })
 
 # arbitrage_calculator.py
-ARBITRAGE_THRESHOLD = 0.10
+ARBITRAGE_THRESHOLD = 0.20
 MAX_POSITIONS_PER_PAIR = 2
 MAX_TOTAL_POSITIONS = 6
-PERCENT_ACCEPTANCE = 0.03
+PERCENT_ACCEPTANCE = -0.10
 
 open_positions = {}
 
@@ -192,39 +192,39 @@ def execute_arbitrage_trade(symbol, long_exchange, short_exchange, amount):
         write_open_positions_to_csv()
 
 
+def calculate_percent_profit(long_price, short_price):
+    return ((short_price - long_price) / long_price) * 100
+
+
 def process_arbitrage_data(pair, latest_prices, last_arbitrage_opportunities, delayed_prints):
-    # print(pair, latest_prices, last_arbitrage_opportunities, delayed_prints)
     binance_data = latest_prices[pair]['binance'][0]
     bybit_data = latest_prices[pair]['bybit'][0]
-    # print(pair, binance_data, bybit_data, delayed_prints)
+
     if (binance_data['bid_price'] is None or binance_data['ask_price'] is None or
             bybit_data['bid_price'] is None or bybit_data['ask_price'] is None):
         return
 
-    if binance_data is None or bybit_data is None:
-        return
-    # if pair == 'STMXUSDT':
-    #     print(pair, binance_data, bybit_data)
-    # Compare Binance's ask price with Bybit's bid price
-    modified_prices = {
-        pair: {
-            'binance': {'price': binance_data['ask_price'], 'timestamp': binance_data['timestamp']},
-            'bybit': {'price': bybit_data['bid_price'], 'timestamp': bybit_data['timestamp']}
-        }
-    }
-    # print(modified_prices)
-    calculate_arbitrage(pair, modified_prices, last_arbitrage_opportunities, delayed_prints)
+    bybit_timestamp = latest_prices[pair]['bybit'][0]['timestamp'].strftime("%Y-%m-%d %H:%M:%S.%f")
+    binance_timestamp = latest_prices[pair]['binance'][0]['timestamp'].strftime("%Y-%m-%d %H:%M:%S.%f")
 
-    # Compare Binance's bid price with Bybit's ask price
-    modified_prices = {
-        pair: {
-            'binance': {'price': binance_data['bid_price'], 'timestamp': binance_data['timestamp']},
-            'bybit': {'price': bybit_data['ask_price'], 'timestamp': bybit_data['timestamp']}
-        }
-    }
-    # print(modified_prices)
-    calculate_arbitrage(pair, modified_prices, last_arbitrage_opportunities, delayed_prints)
-
+    # Check if Bybit's bid price is higher than Binance's ask price
+    if bybit_data['bid_price'] > binance_data['ask_price']:
+        long_exchange = 'binance'
+        short_exchange = 'bybit'
+        percent_profit = calculate_percent_profit(binance_data['ask_price'], bybit_data['bid_price'])
+        if percent_profit >= ARBITRAGE_THRESHOLD:
+            print(pair, long_exchange, binance_data['ask_price'], short_exchange, bybit_data['bid_price'], 'amount',
+                  f'percent_profit: {percent_profit:.2f}%, Bybit timestamp: {bybit_timestamp}, Binance timestamp: {binance_timestamp}')
+            execute_arbitrage_trade(pair, long_exchange, short_exchange, 10)
+    # Check if Binance's bid price is higher than Bybit's ask price
+    if binance_data['bid_price'] > bybit_data['ask_price']:
+        long_exchange = 'bybit'
+        short_exchange = 'binance'
+        percent_profit = calculate_percent_profit(bybit_data['ask_price'], binance_data['bid_price'])
+        if percent_profit >= ARBITRAGE_THRESHOLD:
+            print(pair, long_exchange, bybit_data['ask_price'], short_exchange, binance_data['bid_price'], 'amount',
+                  f'percent_profit: {percent_profit:.2f}%, Bybit timestamp: {bybit_timestamp}, Binance timestamp: {binance_timestamp}')
+            execute_arbitrage_trade(pair, long_exchange, short_exchange, 10)
 
 def calculate_arbitrage(pair, latest_prices, last_arbitrage_opportunities, delayed_prints):
     # print('latest_prices',latest_prices)
