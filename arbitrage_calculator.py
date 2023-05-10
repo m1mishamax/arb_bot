@@ -25,8 +25,8 @@ binance = ccxt.binance({
 
 # arbitrage_calculator.py
 ARBITRAGE_THRESHOLD = 0.25
-MAX_POSITIONS_PER_PAIR = 2
-MAX_TOTAL_POSITIONS = 6
+MAX_POSITIONS_PER_PAIR = 1
+MAX_TOTAL_POSITIONS = 5
 PERCENT_ACCEPTANCE = 0.05
 
 open_positions = {}
@@ -82,7 +82,7 @@ def write_trading_history_to_csv(trade_type, symbol, long_exchange, short_exchan
                                  short_price, percent_profit, filename="trading_history.csv"):
     with open(filename, mode="a", newline="") as csvfile:
         fieldnames = ["trade_type", "symbol", "long_exchange", "short_exchange", "amount", "timestamp", "long_price",
-                      "short_price","percent_profit"]
+                      "short_price", "percent_profit"]
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
         # Write header only if the file is empty
@@ -213,6 +213,17 @@ def process_arbitrage_data(pair, latest_prices, last_arbitrage_opportunities, de
             bybit_data['bid_price'] is None or bybit_data['ask_price'] is None):
         return
 
+    bybit_timestamp = latest_prices[pair]['bybit'][0]['timestamp']
+    binance_timestamp = latest_prices[pair]['binance'][0]['timestamp']
+
+    # Check if the data is outdated
+    now = datetime.utcnow()
+    max_allowed_delay = timedelta(seconds=300)
+    if (now - bybit_timestamp > max_allowed_delay) or (now - binance_timestamp > max_allowed_delay):
+        print(
+            f"Warning: Data for {pair} is outdated. Binance timestamp: {binance_timestamp}, Bybit timestamp: {bybit_timestamp}")
+        return
+
     bybit_timestamp = latest_prices[pair]['bybit'][0]['timestamp'].strftime("%Y-%m-%d %H:%M:%S.%f")
     binance_timestamp = latest_prices[pair]['binance'][0]['timestamp'].strftime("%Y-%m-%d %H:%M:%S.%f")
     percent_profit = calculate_percent_profit(binance_data['ask_price'], bybit_data['bid_price'])
@@ -233,7 +244,7 @@ def process_arbitrage_data(pair, latest_prices, last_arbitrage_opportunities, de
     elif bybit_data['ask_price'] < binance_data['bid_price']:
         percent_profit = calculate_percent_profit(bybit_data['ask_price'], binance_data['bid_price'])
         # print(percent_profit, '1xxz', pair)
-        if percent_profit <= PERCENT_ACCEPTANCE:
+        if percent_profit >= PERCENT_ACCEPTANCE:
             # print('testtest', pair, percent_profit)
             if pair in open_positions:
                 # Find the corresponding long and short exchanges for the open position
@@ -265,7 +276,7 @@ def process_arbitrage_data(pair, latest_prices, last_arbitrage_opportunities, de
     elif binance_data['ask_price'] < bybit_data['bid_price']:
         percent_profit = calculate_percent_profit(binance_data['ask_price'], bybit_data['bid_price'])
         # print(percent_profit, '2xxz', pair)
-        if percent_profit <= PERCENT_ACCEPTANCE:
+        if percent_profit >= PERCENT_ACCEPTANCE:
             # print('testtest', pair, percent_profit)
             if pair in open_positions:
                 # Find the corresponding long and short exchanges for the open position

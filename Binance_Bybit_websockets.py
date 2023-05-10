@@ -10,7 +10,7 @@ from arbitrage_calculator import process_arbitrage_data
 # Constants
 API_BASE_BINANCE = "https://fapi.binance.com"
 API_BASE_BYBIT = "https://api.bybit.com"
-ignored_tokens = ['1000PEPEUSDT']
+ignored_tokens = []
 
 
 # REST API calls to get trading pairs
@@ -126,7 +126,6 @@ def process_bybit_data(data):
     # print('Bybit',pair,timestamp.strftime(
     #                 "%Y-%m-%d %H:%M:%S.%f"))
 
-
     process_arbitrage_data(pair, latest_prices, last_arbitrage_opportunities, delayed_prints)
 
 
@@ -205,6 +204,8 @@ async def print_delayed_updates():
             delayed_prints.pop(pair)
 
 
+
+
 async def binance_websocket():
     uri = "wss://fstream.binance.com/ws"
     while True:
@@ -224,9 +225,13 @@ async def binance_websocket():
                     data = json.loads(message)
                     # print(data)
                     process_binance_data(data)
+        except websockets.ConnectionClosed as cc:
+            print(f"Binance websocket disconnected: {cc}. Reconnecting...")
+            await asyncio.sleep(5)
         except Exception as e:
             print(f"Binance websocket connection error: {e}. Reconnecting...")
             await asyncio.sleep(5)
+
 
 
 async def bybit_websocket():
