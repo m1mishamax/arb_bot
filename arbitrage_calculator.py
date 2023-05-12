@@ -23,11 +23,14 @@ binance = ccxt.binance({
     'secret': 'oBtFDAlJtmLFoHTdt8P80GTpYO6FBEEmMztD',
 })
 
+
+
+
 # arbitrage_calculator.py
-ARBITRAGE_THRESHOLD = 0.25
+ARBITRAGE_THRESHOLD = 0.30
 MAX_POSITIONS_PER_PAIR = 1
 MAX_TOTAL_POSITIONS = 5
-PERCENT_ACCEPTANCE = 0.05
+PERCENT_ACCEPTANCE = 0.02
 
 open_positions = {}
 
@@ -201,6 +204,34 @@ def execute_arbitrage_trade(symbol, long_exchange, short_exchange, amount, long_
         write_open_positions_to_csv()
 
 
+def check_websocket_health(latest_prices, max_delay_ms=20000):  # max_delay is in milliseconds
+    now = datetime.utcnow()
+    most_recent_timestamp = None
+    most_recent_exchange = None
+    most_recent_pair = None
+
+    for pair, exchange_data in latest_prices.items():
+        for exchange, data in exchange_data.items():
+            timestamp = data[0]['timestamp']
+            if timestamp is not None:
+                if most_recent_timestamp is None or timestamp > most_recent_timestamp:
+                    most_recent_timestamp = timestamp
+                    most_recent_exchange = exchange
+                    most_recent_pair = pair
+
+    max_delay_s = max_delay_ms / 1000  # convert to seconds
+
+    if most_recent_timestamp is not None:
+        delay_s = (now - most_recent_timestamp).total_seconds()
+        delay_ms = delay_s * 1000  # convert back to milliseconds for display
+        if delay_s > max_delay_s:
+            print(
+                f"Warning_: Most recent data is outdated by {delay_ms} ms. Pair: {most_recent_pair}, Exchange: {most_recent_exchange}, Most recent timestamp: {most_recent_timestamp}")
+            return False
+
+    return True
+
+
 def calculate_percent_profit(long_price, short_price):
     return ((short_price - long_price) / long_price) * 100
 
@@ -218,11 +249,13 @@ def process_arbitrage_data(pair, latest_prices, last_arbitrage_opportunities, de
 
     # Check if the data is outdated
     now = datetime.utcnow()
-    max_allowed_delay = timedelta(seconds=300)
+    max_allowed_delay = timedelta(seconds=400)
     if (now - bybit_timestamp > max_allowed_delay) or (now - binance_timestamp > max_allowed_delay):
         print(
             f"Warning: Data for {pair} is outdated. Binance timestamp: {binance_timestamp}, Bybit timestamp: {bybit_timestamp}")
         return
+
+    check_websocket_health(latest_prices, max_delay_ms=3000)
 
     bybit_timestamp = latest_prices[pair]['bybit'][0]['timestamp'].strftime("%Y-%m-%d %H:%M:%S.%f")
     binance_timestamp = latest_prices[pair]['binance'][0]['timestamp'].strftime("%Y-%m-%d %H:%M:%S.%f")
