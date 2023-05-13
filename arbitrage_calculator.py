@@ -28,6 +28,9 @@ binance = ccxt.binance({
 api_key_binance = '1LVUDp2y94SmGpBUipZQHSRpz65mdPy3Ovhz2CZOYTBpA5hpeZBXgNXZ4mG2Kc8K'
 secret_key_binance = 'R2jH9LT7MtrpIs5jGZtuadUzRSXzR9TmS8R57Mcbb8wZLTCylUvzjfIifWM3qa1k'
 
+api_key_bybit = 'ciXK8ohtCniimqpcC8'
+secret_key_bybit = 'm1zVbVf1NFgN8MsvW90Rm9WFMRRdA7NnlluY'
+
 
 def open_order_binance(api_key, api_secret, symbol, side, order_type, usdt_amount, leverage, price=None):
     binance_futures = ccxt.binance({
@@ -95,20 +98,18 @@ def bybit_close_position(api_key, api_secret, symbol):
     # Fetch position details
     response = bybit_futures.private_get_private_linear_position_list({'symbol': symbol})
     position = response['result'][0]
-    qty = int(position['size'])  # Convert to integer
+    qty = abs(int(position['size']))  # Absolute value of size
 
     # Close position
-    if qty > 0:  # Long position
+    if position['side'] == 'Buy':  # Long position
         order = bybit_futures.create_market_sell_order(symbol=symbol, amount=qty)
-    elif qty < 0:  # Short position
-        order = bybit_futures.create_market_buy_order(symbol=symbol, amount=-qty)
+    elif position['side'] == 'Sell':  # Short position
+        order = bybit_futures.create_market_buy_order(symbol=symbol, amount=qty)
 
     # Return the order result or any other desired output
     return order
 
 
-api_key_bybit = 'ciXK8ohtCniimqpcC8'
-secret_key_bybit = 'm1zVbVf1NFgN8MsvW90Rm9WFMRRdA7NnlluY'
 
 
 def open_order_bybit(api_key, api_secret, symbol, side, order_type, usdt_amount, leverage, price=None):
@@ -147,10 +148,13 @@ def open_order_bybit(api_key, api_secret, symbol, side, order_type, usdt_amount,
     return bybit_futures.create_order(**market_order)
 
 
-def binance_long_bybit_short(api_key_binance, secret_key_binance, api_key_bybit, secret_key_bybit, symbol, usdt_amount, leverage, long_price, short_price):
+def binance_long_bybit_short(api_key_binance, secret_key_binance, api_key_bybit, secret_key_bybit, symbol, usdt_amount,
+                             leverage, long_price, short_price):
     # Create two threads, one for each function call
-    binance_thread = threading.Thread(target=open_order_binance, args=(api_key_binance, secret_key_binance, symbol, 'buy', 'market', usdt_amount, leverage, long_price))
-    bybit_thread = threading.Thread(target=open_order_bybit, args=(api_key_bybit, secret_key_bybit, symbol, 'sell', 'market', usdt_amount, leverage, short_price))
+    binance_thread = threading.Thread(target=open_order_binance, args=(
+        api_key_binance, secret_key_binance, symbol, 'buy', 'market', usdt_amount, leverage, long_price))
+    bybit_thread = threading.Thread(target=open_order_bybit, args=(
+        api_key_bybit, secret_key_bybit, symbol, 'sell', 'market', usdt_amount, leverage, short_price))
 
     # Start the threads
     binance_thread.start()
@@ -160,10 +164,14 @@ def binance_long_bybit_short(api_key_binance, secret_key_binance, api_key_bybit,
     binance_thread.join()
     bybit_thread.join()
 
-def bybit_long_binance_short(api_key_bybit, secret_key_bybit, api_key_binance, secret_key_binance, symbol, usdt_amount, leverage, short_price, long_price):
+
+def bybit_long_binance_short(api_key_bybit, secret_key_bybit, api_key_binance, secret_key_binance, symbol, usdt_amount,
+                             leverage, short_price, long_price):
     # Create two threads, one for each function call
-    bybit_thread = threading.Thread(target=open_order_bybit, args=(api_key_bybit, secret_key_bybit, symbol, 'buy', 'market', usdt_amount, leverage, short_price))
-    binance_thread = threading.Thread(target=open_order_binance, args=(api_key_binance, secret_key_binance, symbol, 'sell', 'market', usdt_amount, leverage, long_price))
+    bybit_thread = threading.Thread(target=open_order_bybit, args=(
+        api_key_bybit, secret_key_bybit, symbol, 'buy', 'market', usdt_amount, leverage, short_price))
+    binance_thread = threading.Thread(target=open_order_binance, args=(
+        api_key_binance, secret_key_binance, symbol, 'sell', 'market', usdt_amount, leverage, long_price))
 
     # Start the threads
     bybit_thread.start()
@@ -173,21 +181,26 @@ def bybit_long_binance_short(api_key_bybit, secret_key_bybit, api_key_binance, s
     bybit_thread.join()
     binance_thread.join()
 
-# Then, you can decide which set of operations to run based on your conditions:
 
+def close_positions_concurrently(api_key_binance, secret_key_binance, api_key_bybit, secret_key_bybit, symbol):
+    # Create two threads, one for each function call
+    binance_thread = threading.Thread(target=binance_close_position, args=(api_key_binance, secret_key_binance, symbol))
+    bybit_thread = threading.Thread(target=bybit_close_position, args=(api_key_bybit, secret_key_bybit, symbol))
 
-# binance_long_bybit_short()
-#
-# bybit_long_binance_short()
+    # Start the threads
+    binance_thread.start()
+    bybit_thread.start()
 
-
+    # Wait for both threads to finish
+    binance_thread.join()
+    bybit_thread.join()
 
 
 # arbitrage_calculator.py
-ARBITRAGE_THRESHOLD = 0.35
+ARBITRAGE_THRESHOLD = 0.28
 MAX_POSITIONS_PER_PAIR = 1
-MAX_TOTAL_POSITIONS = 1
-PERCENT_ACCEPTANCE = 3.02  # Close percent bonus acceptance
+MAX_TOTAL_POSITIONS = 3
+PERCENT_ACCEPTANCE = 0.03  # Close percent bonus acceptance
 
 open_positions = {}
 
@@ -210,18 +223,20 @@ def close_position(symbol, long_exchange, short_exchange, amount, long_price, sh
     if long_exchange == "binance":
         # long_order = place_binance_order(symbol, "sell", amount)
         # short_order = place_bybit_order(symbol, "buy", amount)
-        result_binance = binance_close_position(api_key_binance, secret_key_binance, symbol)
-        print(result_binance)
-        result_bybit = bybit_close_position(api_key_bybit, secret_key_bybit, symbol)
-        print(result_bybit)
+        # result_binance = binance_close_position(api_key_binance, secret_key_binance, symbol)
+        # print(result_binance)
+        # result_bybit = bybit_close_position(api_key_bybit, secret_key_bybit, symbol)
+        # print(result_bybit)
+        close_positions_concurrently(api_key_binance, secret_key_binance, api_key_bybit, secret_key_bybit, symbol)
         pass
     else:
         # long_order = place_bybit_order(symbol, "sell", amount)
         # short_order = place_binance_order(symbol, "buy", amount)
-        result_binance = binance_close_position(api_key_binance, secret_key_binance, symbol)
-        print(result_binance)
-        result_bybit = bybit_close_position(api_key_bybit, secret_key_bybit, symbol)
-        print(result_bybit)
+        # result_binance = binance_close_position(api_key_binance, secret_key_binance, symbol)
+        # print(result_binance)
+        # result_bybit = bybit_close_position(api_key_bybit, secret_key_bybit, symbol)
+        # print(result_bybit)
+        close_positions_concurrently(api_key_binance, secret_key_binance, api_key_bybit, secret_key_bybit, symbol)
         pass
     # if long_order and short_order:
     if True:
@@ -335,22 +350,25 @@ def execute_arbitrage_trade(symbol, long_exchange, short_exchange, amount, long_
             # long_order = place_binance_order(symbol, "buy", amount)
             # short_order = place_bybit_order(symbol, "sell", amount)
 
-            open_order_binance(api_key_binance, secret_key_binance, symbol, 'buy', 'market', usdt_amount, 3,
-                               long_price)
+            # open_order_binance(api_key_binance, secret_key_binance, symbol, 'buy', 'market', usdt_amount, 3,
+            #                    long_price)
+            #
+            # open_order_bybit(api_key_bybit, secret_key_bybit, symbol, 'sell', 'market', usdt_amount, 3, short_price)
+            binance_long_bybit_short(api_key_binance, secret_key_binance, api_key_bybit, secret_key_bybit, symbol,
+                                     usdt_amount, 3, long_price, short_price)
 
-            open_order_bybit(api_key_bybit, secret_key_bybit, symbol, 'sell', 'market', usdt_amount, 3, short_price)
-
-            pass
+            # pass
         else:
             # long_order = place_bybit_order(symbol, "buy", amount)
             # short_order = place_binance_order(symbol, "sell", amount)
 
-            open_order_bybit(api_key_bybit, secret_key_bybit, symbol, 'buy', 'market', usdt_amount, 3, short_price)
-
-            open_order_binance(api_key_binance, secret_key_binance, symbol, 'sell', 'market', usdt_amount, 3,
-                               long_price)
-
-            pass
+            # open_order_bybit(api_key_bybit, secret_key_bybit, symbol, 'buy', 'market', usdt_amount, 3, short_price)
+            #
+            # open_order_binance(api_key_binance, secret_key_binance, symbol, 'sell', 'market', usdt_amount, 3,
+            #                    long_price)
+            bybit_long_binance_short(api_key_bybit, secret_key_bybit, api_key_binance, secret_key_binance, symbol,
+                                     usdt_amount, 3, short_price, long_price)
+            # pass
         # if long_order and short_order: add it back later
         if True:
             open_positions[symbol].append({
@@ -427,7 +445,7 @@ def process_arbitrage_data(pair, latest_prices, last_arbitrage_opportunities, de
 
     # Check if the data is outdated
     now = datetime.utcnow()
-    max_allowed_delay = timedelta(seconds=400)
+    max_allowed_delay = timedelta(seconds=1300)
     if (now - bybit_timestamp > max_allowed_delay) or (now - binance_timestamp > max_allowed_delay):
         print(
             f"Warning: Data for {pair} is outdated. Binance timestamp: {binance_timestamp}, Bybit timestamp: {bybit_timestamp}")
