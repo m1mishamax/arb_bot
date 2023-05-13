@@ -51,6 +51,7 @@ def get_binance_volumes() -> List[dict]:
 binance_volumes = get_binance_volumes()
 filtered_volumes = [pair for pair in binance_volumes if pair['symbol'] in matching_pairs]
 sorted_volumes = sorted(filtered_volumes, key=lambda x: float(x['quoteVolume']))
+print('selected_pairs amount is: ',len(sorted_volumes))
 selected_pairs = [pair['symbol'] for pair in sorted_volumes[:200]]
 
 # Remove the first latest_prices initialization
@@ -60,7 +61,8 @@ selected_pairs = [pair['symbol'] for pair in sorted_volumes[:200]]
 last_arbitrage_opportunities = {}
 # Store delayed prints
 delayed_prints = {}
-
+unique_pairs_binance = set()
+unique_pairs_bybit = set()
 # Initialize the latest_prices dictionary with None values
 latest_prices = {pair: {'binance': [{'bid_price': None, 'ask_price': None, 'timestamp': None}],
                         'bybit': [{'bid_price': None, 'ask_price': None, 'timestamp': None}]} for pair in
@@ -70,6 +72,7 @@ last_received_timestamps = {pair: {'binance': None, 'bybit': None} for pair in s
 
 
 def process_binance_data(data):
+    global unique_pairs_binance
     if 's' not in data or 'b' not in data or 'a' not in data or 'E' not in data:
         return
 
@@ -78,17 +81,22 @@ def process_binance_data(data):
     ask_price = float(data['a'])
     seconds, milliseconds = divmod(data['E'], 1000)
     timestamp = datetime.utcfromtimestamp(seconds) + timedelta(milliseconds=milliseconds)
+
+    # Add the pair to the set of unique pairs and print the current count
+    unique_pairs_binance.add(pair)
+    # print(f"Unique pairs count binance: {len(unique_pairs_binance)}")
+
     latest_prices[pair]['binance'].pop(0)  # Remove the oldest price data
     latest_prices[pair]['binance'].append(
         {'bid_price': bid_price, 'ask_price': ask_price, 'timestamp': timestamp})  # Add the new price data
     last_received_timestamps[pair]['binance'] = timestamp  # Store the timestamp of the received data
-    # print('process_binance_data', pair, latest_prices, last_arbitrage_opportunities, delayed_prints)
-    # print('Binance', pair, timestamp.strftime(
-    #     "%Y-%m-%d %H:%M:%S.%f"))
+
     process_arbitrage_data(pair, latest_prices, last_arbitrage_opportunities, delayed_prints)
 
 
+
 def process_bybit_data(data):
+    global unique_pairs_bybit
     if 'topic' not in data or 'data' not in data:
         return
     # print("Bybit raw data:", data)
@@ -96,6 +104,9 @@ def process_bybit_data(data):
     # timestamp = data['timestamp_e6']
     # print(timestamp)
     timestamp = datetime.utcfromtimestamp(int(data['timestamp_e6']) / 1_000_000)
+    # Add the pair to the set of unique pairs and print the current count
+    unique_pairs_bybit.add(pair)
+    # print(f"Unique pairs count bybit: {len(unique_pairs_bybit)}")
     if data['type'] == 'snapshot':
         return  # Ignore snapshot data
     elif data['type'] == 'delta':
@@ -202,8 +213,6 @@ async def print_delayed_updates():
 
         for pair in pairs_to_remove:
             delayed_prints.pop(pair)
-
-
 
 
 async def binance_websocket():

@@ -3,6 +3,7 @@ import time
 import ccxt  # API for accessing Bybit and Binance exchanges
 import csv
 import threading
+import config
 
 # Initialize the API clients for Bybit and Binance exchanges
 bybit = ccxt.bybit({
@@ -25,11 +26,11 @@ binance = ccxt.binance({
 })
 
 # Replace with your API keys
-api_key_binance = '1LVUDp2y94SmGpBUipZQHSRpz65mdPy3Ovhz2CZOYTBpA5hpeZBXgNXZ4mG2Kc8K'
-secret_key_binance = 'R2jH9LT7MtrpIs5jGZtuadUzRSXzR9TmS8R57Mcbb8wZLTCylUvzjfIifWM3qa1k'
+api_key_binance = config.api_key_binance
+secret_key_binance = config.secret_key_binance
 
-api_key_bybit = 'ciXK8ohtCniimqpcC8'
-secret_key_bybit = 'm1zVbVf1NFgN8MsvW90Rm9WFMRRdA7NnlluY'
+api_key_bybit = config.api_key_bybit
+secret_key_bybit = config.secret_key_bybit
 
 
 def open_order_binance(api_key, api_secret, symbol, side, order_type, usdt_amount, leverage, price=None):
@@ -49,7 +50,7 @@ def open_order_binance(api_key, api_secret, symbol, side, order_type, usdt_amoun
     # Calculate the amount of the asset to buy
     amount = usdt_amount / price
     # Binance's minimum order size precision is typically to 3 decimal places, but this can vary per asset
-    amount = round(amount, 6)
+    amount = round(amount, 5)
 
     market_order = {
         'symbol': symbol,
@@ -110,8 +111,6 @@ def bybit_close_position(api_key, api_secret, symbol):
     return order
 
 
-
-
 def open_order_bybit(api_key, api_secret, symbol, side, order_type, usdt_amount, leverage, price=None):
     bybit_futures = ccxt.bybit({
         'apiKey': api_key_bybit,
@@ -133,7 +132,7 @@ def open_order_bybit(api_key, api_secret, symbol, side, order_type, usdt_amount,
     # Calculate the quantity of the asset to buy
     quantity = usdt_amount / price
     # Bybit's order quantity precision is typically to 2 decimal places
-    quantity = round(quantity, 6)
+    quantity = round(quantity, 5)
 
     market_order = {
         'symbol': symbol,
@@ -197,10 +196,7 @@ def close_positions_concurrently(api_key_binance, secret_key_binance, api_key_by
 
 
 # arbitrage_calculator.py
-ARBITRAGE_THRESHOLD = 0.28
-MAX_POSITIONS_PER_PAIR = 1
-MAX_TOTAL_POSITIONS = 3
-PERCENT_ACCEPTANCE = 0.03  # Close percent bonus acceptance
+from config import ARBITRAGE_THRESHOLD, MAX_POSITIONS_PER_PAIR, MAX_TOTAL_POSITIONS, PERCENT_ACCEPTANCE
 
 open_positions = {}
 
@@ -227,7 +223,7 @@ def close_position(symbol, long_exchange, short_exchange, amount, long_price, sh
         # print(result_binance)
         # result_bybit = bybit_close_position(api_key_bybit, secret_key_bybit, symbol)
         # print(result_bybit)
-        close_positions_concurrently(api_key_binance, secret_key_binance, api_key_bybit, secret_key_bybit, symbol)
+        # close_positions_concurrently(api_key_binance, secret_key_binance, api_key_bybit, secret_key_bybit, symbol)
         pass
     else:
         # long_order = place_bybit_order(symbol, "sell", amount)
@@ -236,7 +232,7 @@ def close_position(symbol, long_exchange, short_exchange, amount, long_price, sh
         # print(result_binance)
         # result_bybit = bybit_close_position(api_key_bybit, secret_key_bybit, symbol)
         # print(result_bybit)
-        close_positions_concurrently(api_key_binance, secret_key_binance, api_key_bybit, secret_key_bybit, symbol)
+        # close_positions_concurrently(api_key_binance, secret_key_binance, api_key_bybit, secret_key_bybit, symbol)
         pass
     # if long_order and short_order:
     if True:
@@ -347,28 +343,41 @@ def execute_arbitrage_trade(symbol, long_exchange, short_exchange, amount, long_
 
     if positions_per_pair < MAX_POSITIONS_PER_PAIR and total_positions < MAX_TOTAL_POSITIONS:
         if long_exchange == "binance":
+            print(
+                f"long_exchange: {long_exchange}, positions_per_pair: {positions_per_pair}, MAX_POSITIONS_PER_PAIR: {MAX_POSITIONS_PER_PAIR}, total_positions: {total_positions}, MAX_TOTAL_POSITIONS: {MAX_TOTAL_POSITIONS}")
+
             # long_order = place_binance_order(symbol, "buy", amount)
             # short_order = place_bybit_order(symbol, "sell", amount)
-
+            print(long_exchange, symbol, 'buy', 'market', usdt_amount, 3,
+                  long_price, datetime.now())
             # open_order_binance(api_key_binance, secret_key_binance, symbol, 'buy', 'market', usdt_amount, 3,
             #                    long_price)
-            #
-            # open_order_bybit(api_key_bybit, secret_key_bybit, symbol, 'sell', 'market', usdt_amount, 3, short_price)
-            binance_long_bybit_short(api_key_binance, secret_key_binance, api_key_bybit, secret_key_bybit, symbol,
-                                     usdt_amount, 3, long_price, short_price)
+            print(long_exchange, symbol, 'sell', 'market', usdt_amount, 3,
+                  short_price, datetime.now())
+            open_order_bybit(api_key_bybit, secret_key_bybit, symbol, 'sell', 'market', usdt_amount, 3, short_price)
+            print(f"long_exchange_x: {long_exchange}, AfterBothOrdersTheTime", datetime.now())
 
-            # pass
+            # binance_long_bybit_short(api_key_binance, secret_key_binance, api_key_bybit, secret_key_bybit, symbol,
+            #                          usdt_amount, 3, long_price, short_price)
+
+            pass
         else:
+            print(
+                f"long_exchange: {long_exchange}, positions_per_pair: {positions_per_pair}, MAX_POSITIONS_PER_PAIR: {MAX_POSITIONS_PER_PAIR}, total_positions: {total_positions}, MAX_TOTAL_POSITIONS: {MAX_TOTAL_POSITIONS}")
             # long_order = place_bybit_order(symbol, "buy", amount)
             # short_order = place_binance_order(symbol, "sell", amount)
+            print(long_exchange, symbol, 'buy', 'market', usdt_amount, 3, short_price, datetime.now())
+            open_order_bybit(api_key_bybit, secret_key_bybit, symbol, 'buy', 'market', usdt_amount, 3, short_price)
 
-            # open_order_bybit(api_key_bybit, secret_key_bybit, symbol, 'buy', 'market', usdt_amount, 3, short_price)
-            #
+            print(long_exchange, symbol, 'sell', 'market', usdt_amount, 3,
+                  long_price, datetime.now())
             # open_order_binance(api_key_binance, secret_key_binance, symbol, 'sell', 'market', usdt_amount, 3,
             #                    long_price)
-            bybit_long_binance_short(api_key_bybit, secret_key_bybit, api_key_binance, secret_key_binance, symbol,
-                                     usdt_amount, 3, short_price, long_price)
-            # pass
+            print(f"long_exchange_x: {long_exchange}, AfterBothOrdersTheTime", datetime.now())
+
+            # bybit_long_binance_short(api_key_bybit, secret_key_bybit, api_key_binance, secret_key_binance, symbol,
+            #                          usdt_amount, 3, short_price, long_price)
+            pass
         # if long_order and short_order: add it back later
         if True:
             open_positions[symbol].append({
@@ -380,7 +389,7 @@ def execute_arbitrage_trade(symbol, long_exchange, short_exchange, amount, long_
                 "short_price": short_price,
                 "percent_profit": percent_profit
             })
-            print(f"Arbitrage trade executed: long on {long_exchange}, short on {short_exchange}")
+            print(f"Arbitrage trade executed: long on {long_exchange}, short on {short_exchange} {datetime.now()}")
             write_trading_history_to_csv("trade_open", symbol, long_exchange, short_exchange, amount,
                                          datetime.now(timezone.utc), long_price, short_price, percent_profit)
             print()
@@ -400,20 +409,49 @@ def execute_arbitrage_trade(symbol, long_exchange, short_exchange, amount, long_
         write_open_positions_to_csv()
 
 
+class ThrottledPrinter:
+    def __init__(self, min_interval_seconds=1):
+        self.min_interval_seconds = min_interval_seconds
+        self.last_print_timestamp = datetime.utcnow()
+
+    def print_throttled(self, message):
+        now = datetime.utcnow()
+        seconds_since_last_print = (now - self.last_print_timestamp).total_seconds()
+        if seconds_since_last_print >= self.min_interval_seconds:
+            print(message)
+            self.last_print_timestamp = now
+            return True
+        else:
+            return False
+
+
+throttled_printer = ThrottledPrinter()
+
+
 def check_websocket_health(latest_prices, max_delay_ms=20000):  # max_delay is in milliseconds
     now = datetime.utcnow()
     most_recent_timestamp = None
+    second_most_recent_timestamp = None
     most_recent_exchange = None
+    second_most_recent_exchange = None
     most_recent_pair = None
+    second_most_recent_pair = None
 
     for pair, exchange_data in latest_prices.items():
         for exchange, data in exchange_data.items():
             timestamp = data[0]['timestamp']
             if timestamp is not None:
                 if most_recent_timestamp is None or timestamp > most_recent_timestamp:
+                    second_most_recent_timestamp = most_recent_timestamp
+                    second_most_recent_exchange = most_recent_exchange
+                    second_most_recent_pair = most_recent_pair
                     most_recent_timestamp = timestamp
                     most_recent_exchange = exchange
                     most_recent_pair = pair
+                elif second_most_recent_timestamp is None or timestamp > second_most_recent_timestamp:
+                    second_most_recent_timestamp = timestamp
+                    second_most_recent_exchange = exchange
+                    second_most_recent_pair = pair
 
     max_delay_s = max_delay_ms / 1000  # convert to seconds
 
@@ -421,8 +459,13 @@ def check_websocket_health(latest_prices, max_delay_ms=20000):  # max_delay is i
         delay_s = (now - most_recent_timestamp).total_seconds()
         delay_ms = delay_s * 1000  # convert back to milliseconds for display
         if delay_s > max_delay_s:
-            print(
-                f"Warning_: Most recent data is outdated by {delay_ms} ms. Pair: {most_recent_pair}, Exchange: {most_recent_exchange}, Most recent timestamp: {most_recent_timestamp}")
+            if throttled_printer.print_throttled(
+                    f"Warning: Most recent data is outdated by {delay_ms} ms. Pair: {most_recent_pair}, Exchange: {most_recent_exchange}, Most recent timestamp: {most_recent_timestamp}"):
+                if second_most_recent_timestamp is not None:
+                    second_delay_s = (now - second_most_recent_timestamp).total_seconds()
+                    second_delay_ms = second_delay_s * 1000  # convert back to milliseconds for display
+                    print(
+                        f"Second most recent data is outdated by {second_delay_ms} ms. Pair: {second_most_recent_pair}, Exchange: {second_most_recent_exchange}, Most recent timestamp: {second_most_recent_timestamp}")
             return False
 
     return True
