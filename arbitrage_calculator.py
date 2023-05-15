@@ -44,8 +44,8 @@ binance_exchange_info = binance_futures_get_exchange_info()
 
 
 def adjust_precision(quantity, precision):
-    decimal_places = int(str(precision)[::-1].find('.'))
-    return round(quantity, decimal_places)
+    format_str = "{:." + str(precision) + "f}"
+    return float(format_str.format(quantity))
 
 
 def binance_generate_signature(query_string, api_secret):
@@ -65,15 +65,15 @@ def binance_open_order(api_key, api_secret, symbol, side, order_type, usdt_amoun
     }
     price = round(price, 7)
     # print()
-    # print('hat is happening?', usdt_amount, price, 'what is happening?')
-    # print()
+    print('hat is happening?', usdt_amount, price, 'what is happening?')
+    print()
     amount = usdt_amount / price
-    # print('test69line', amount, price)
-    # print()
+    print('test69line', amount, price)
+    print()
     amount = adjust_precision(amount, precision)
-    # print(amount, precision, 'wait a second')
-    # print()
-    # print('test71line', amount, price, 'lol', amount)
+    print(amount, precision, 'wait a second',precision)
+    print()
+    print('test71line', amount, price, 'lol', amount)
     binance_params = {
         'symbol': symbol,
         'side': side.upper(),
@@ -376,7 +376,7 @@ def execute_arbitrage_trade(symbol, long_exchange, short_exchange, amount, long_
             binance_executor.submit(binance_open_order, api_key_binance, secret_key_binance, symbol, 'buy', 'market',
                                     usdt_amount, 3,
                                     long_price)
-            print(long_exchange, symbol, 'sell', 'market', usdt_amount, 3,
+            print(short_price, symbol, 'sell', 'market', usdt_amount, 3,
                   short_price, datetime.now())
             # bybit_open_order(api_key_bybit, secret_key_bybit, symbol, 'sell', 'market', usdt_amount, 3, short_price)
             bybit_executor.submit(bybit_open_order, api_key_bybit, secret_key_bybit, symbol, 'Sell', 'Market',
@@ -389,12 +389,12 @@ def execute_arbitrage_trade(symbol, long_exchange, short_exchange, amount, long_
                 f"long_exchange: {long_exchange}, positions_per_pair: {positions_per_pair}, MAX_POSITIONS_PER_PAIR: {MAX_POSITIONS_PER_PAIR}, total_positions: {total_positions}, MAX_TOTAL_POSITIONS: {MAX_TOTAL_POSITIONS}")
             # long_order = place_bybit_order(symbol, "buy", amount)
             # short_order = place_binance_order(symbol, "sell", amount)
-            print(long_exchange, symbol, 'buy', 'market', usdt_amount, 3, short_price, datetime.now())
+            print(long_exchange, symbol, 'buy', 'market', usdt_amount, 3, long_exchange, datetime.now())
             # bybit_open_order(api_key_bybit, secret_key_bybit, symbol, 'buy', 'market', usdt_amount, 3, long_price)
             bybit_executor.submit(bybit_open_order, api_key_bybit, secret_key_bybit, symbol, 'Buy', 'Market',
                                   usdt_amount, 3, long_price)
-            print(long_exchange, symbol, 'sell', 'market', usdt_amount, 3,
-                  long_price, datetime.now())
+            print(short_exchange, symbol, 'sell', 'market', usdt_amount, 3,
+                  short_price, datetime.now())
             # binance_open_order(api_key_binance, secret_key_binance, symbol, 'sell', 'market', usdt_amount, 3,
             #                    short_price)
             binance_executor.submit(binance_open_order, api_key_binance, secret_key_binance, symbol, 'sell', 'market',
