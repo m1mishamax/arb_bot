@@ -164,6 +164,7 @@ def binance_close_position(api_key, api_secret, symbol):
             full_url = f"https://fapi.binance.com/fapi/v1/order?{encoded_params}"
             response = http.request('POST', full_url, headers=binance_headers)
             order = json.loads(response.data)
+            print('167 binance closed order successfully',order)
             return order
         else:
             return "No position to close."
