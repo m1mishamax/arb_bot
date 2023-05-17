@@ -26,10 +26,19 @@ api_key_bybit = config.api_key_bybit
 secret_key_bybit = config.secret_key_bybit
 
 
+def store_when_order_0_to_csv(params, amount):
+    # Check if the variable has a value of 0.0
+    if amount == 0.0:
+        # Open the CSV file in append mode
+        with open('order0binance.csv', 'a', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(params.values())
+
+
 def binance_futures_get_exchange_info():
     response = requests.get('https://fapi.binance.com/fapi/v1/exchangeInfo')
     data = response.json()
-    # print("Binance's data for precision is loaded.")
+    print("Binance's data for precision is loaded.")
     return data
 
 
@@ -71,8 +80,9 @@ def binance_open_order(api_key, api_secret, symbol, side, order_type, usdt_amoun
     print('test69line', amount, price)
     print()
     amount = adjust_precision(amount, precision)
-    print(amount, precision, 'wait a second',precision)
+    print(amount, precision, 'wait a second', precision)
     print()
+    print('test71line', amount, price, 'lol', amount)
     print('test71line', amount, price, 'lol', amount)
     binance_params = {
         'symbol': symbol,
@@ -82,7 +92,12 @@ def binance_open_order(api_key, api_secret, symbol, side, order_type, usdt_amoun
         'leverage': leverage,
         'timestamp': timestamp  # Include the timestamp parameter
     }
-    print(binance_params)
+    print(binance_params, 868686)
+    if amount == 0:
+        store_when_order_0_to_csv(binance_params, amount)
+        print('We found it 97')
+        return
+
     if price is not None and order_type.upper() != 'MARKET':
         binance_params['price'] = price
 
@@ -133,7 +148,8 @@ def binance_close_position(api_key, api_secret, symbol):
                 'side': 'SELL' if float(position[0]['positionAmt']) > 0 else 'BUY',
                 'type': 'MARKET',
                 'quantity': quantity,
-                'timestamp': timestamp
+                'timestamp': timestamp,
+                'reduceOnly': 'true'  # Add this line
             }
             query_string = urllib.parse.urlencode(params)
             signature = binance_generate_signature(query_string, api_secret)
@@ -160,9 +176,9 @@ def bybit_close_position(api_key, api_secret, symbol):
 
     # Close position
     if position['side'] == 'Buy':  # Long position
-        order = bybit_futures.create_market_sell_order(symbol=symbol, amount=qty)
+        order = bybit_futures.create_market_sell_order(symbol=symbol, amount=qty, params={'reduce_only': True})  # Long position
     elif position['side'] == 'Sell':  # Short position
-        order = bybit_futures.create_market_buy_order(symbol=symbol, amount=qty)
+        order = bybit_futures.create_market_buy_order(symbol=symbol, amount=qty, params={'reduce_only': True})  # Short position
 
     # Return the order result or any other desired output
     return order
@@ -370,13 +386,14 @@ def execute_arbitrage_trade(symbol, long_exchange, short_exchange, amount, long_
             # long_order = place_binance_order(symbol, "buy", amount)
             # short_order = place_bybit_order(symbol, "sell", amount)
             print(long_exchange, symbol, 'buy', 'market', usdt_amount, 3,
-                  long_price, datetime.now())
+                  long_price, datetime.now(), '374')
             # binance_open_order(api_key_binance, secret_key_binance, symbol, 'buy', 'market', usdt_amount, 3,
             #                    long_price)
             binance_executor.submit(binance_open_order, api_key_binance, secret_key_binance, symbol, 'buy', 'market',
                                     usdt_amount, 3,
                                     long_price)
-            print(short_price, symbol, 'sell', 'market', usdt_amount, 3,
+            print('380 haha I was launched')
+            print(short_exchange, symbol, 'sell', 'market', usdt_amount, 3,
                   short_price, datetime.now())
             # bybit_open_order(api_key_bybit, secret_key_bybit, symbol, 'sell', 'market', usdt_amount, 3, short_price)
             bybit_executor.submit(bybit_open_order, api_key_bybit, secret_key_bybit, symbol, 'Sell', 'Market',
