@@ -121,8 +121,6 @@ binance_executor = concurrent.futures.ThreadPoolExecutor()
 
 binance_session = requests.Session()
 
-http = urllib3.PoolManager()
-
 
 def binance_close_position(api_key, api_secret, symbol):
     # Generate current timestamp in milliseconds
@@ -143,8 +141,7 @@ def binance_close_position(api_key, api_secret, symbol):
     params['signature'] = signature
 
     http = urllib3.PoolManager()
-    response = http.request('GET', 'https://fapi.binance.com/fapi/v2/positionRisk', headers=binance_headers,
-                            fields=params)
+    response = http.request('GET', 'https://fapi.binance.com/fapi/v2/positionRisk', headers=binance_headers, fields=params)
     position = json.loads(response.data)
 
     if position:
@@ -188,9 +185,11 @@ def bybit_close_position(api_key, api_secret, symbol):
     if position['side'] == 'Buy':  # Long position
         order = bybit_futures.create_market_sell_order(symbol=symbol, amount=qty,
                                                        params={'reduce_only': True})  # Long position
+        print('bybit closed position 192', symbol)
     elif position['side'] == 'Sell':  # Short position
         order = bybit_futures.create_market_buy_order(symbol=symbol, amount=qty,
                                                       params={'reduce_only': True})  # Short position
+        print('bybit closed position 196', symbol)
 
     # Return the order result or any other desired output
     return order
@@ -271,8 +270,10 @@ def close_position(symbol, long_exchange, short_exchange, amount, long_price, sh
         # result_binance = binance_close_position(api_key_binance, secret_key_binance, symbol)
         # print(result_binance)
         # result_bybit = bybit_close_position(api_key_bybit, secret_key_bybit, symbol)
+        print('closing long_exchange binance 274')
         bybit_executor.submit(bybit_close_position, api_key_bybit, secret_key_bybit, symbol)
-        binance_executor.submit(bybit_close_position, api_key_bybit, secret_key_bybit, symbol)
+        binance_executor.submit(binance_close_position, api_key_bybit, secret_key_bybit, symbol)
+        print('after closing long_exchange binance 277')
         # print(result_bybit)
         # close_positions_concurrently(api_key_binance, secret_key_binance, api_key_bybit, secret_key_bybit, symbol)
         pass
@@ -282,8 +283,10 @@ def close_position(symbol, long_exchange, short_exchange, amount, long_price, sh
         # result_binance = binance_close_position(api_key_binance, secret_key_binance, symbol)
         # print(result_binance)
         # result_bybit = bybit_close_position(api_key_bybit, secret_key_bybit, symbol)
+        print('closing long_exchange bybit 287')
         bybit_executor.submit(bybit_close_position, api_key_bybit, secret_key_bybit, symbol)
-        binance_executor.submit(bybit_close_position, api_key_bybit, secret_key_bybit, symbol)
+        binance_executor.submit(binance_close_position, api_key_bybit, secret_key_bybit, symbol)
+        print('closing long_exchange bybit 290')
         # print(result_bybit)
         # close_positions_concurrently(api_key_binance, secret_key_binance, api_key_bybit, secret_key_bybit, symbol)
         pass
@@ -300,14 +303,19 @@ def close_position(symbol, long_exchange, short_exchange, amount, long_price, sh
         print("Failed to close position")
 
 
+last_displayed = {}
+
 def display_open_positions():
     print("\nCurrent open positions:")
     for symbol, positions in open_positions.items():
         if len(positions) > 0:
-            print(f"{symbol}: {len(positions)} open trades")
-            for i, position in enumerate(positions, start=1):
-                print(
-                    f"  {i}. Long on {position['long_exchange']}, short on {position['short_exchange']}, amount: {position['amount']}")
+            now = time.time()
+            if symbol not in last_displayed or now - last_displayed[symbol] >= 0.3:  # 0.1 seconds = 100 milliseconds
+                print(f"{symbol}: {len(positions)} open trades")
+                for i, position in enumerate(positions, start=1):
+                    print(
+                        f"  {i}. Long on {position['long_exchange']}, short on {position['short_exchange']}, amount: {position['amount']}")
+                last_displayed[symbol] = now
 
 
 def write_trading_history_to_csv(trade_type, symbol, long_exchange, short_exchange, amount, timestamp, long_price,
