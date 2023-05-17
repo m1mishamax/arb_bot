@@ -3,7 +3,8 @@ import time
 import ccxt  # API for accessing Bybit and Binance exchanges
 import csv
 import config
-
+import urllib3
+import json
 import requests
 import time
 import hashlib
@@ -11,7 +12,7 @@ import hmac
 import urllib.parse
 from datetime import datetime
 import concurrent.futures
-from binance.um_futures import UMFutures
+
 from datetime import datetime, timedelta, timezone
 import uuid
 
@@ -73,7 +74,6 @@ def binance_open_order(api_key, api_secret, symbol, side, order_type, usdt_amoun
         'X-MBX-APIKEY': api_key
     }
     price = round(price, 7)
-    # print()
     print('hat is happening?', usdt_amount, price, 'what is happening?')
     print()
     amount = usdt_amount / price
@@ -108,8 +108,12 @@ def binance_open_order(api_key, api_secret, symbol, side, order_type, usdt_amoun
     signature = binance_generate_signature(query_string, api_secret)
     binance_params['signature'] = signature
 
-    response = requests.post(binance_url, headers=binance_headers, params=binance_params)
-    response_data = response.json()
+    http = urllib3.PoolManager()
+    encoded_params = urllib.parse.urlencode(binance_params)
+    full_url = f"{binance_url}?{encoded_params}"
+    response = http.request('POST', full_url, headers=binance_headers)
+    response_data = json.loads(response.data.decode('utf-8'))
+
     print(response_data, 'response_data_binance')
 
 
@@ -117,13 +121,15 @@ binance_executor = concurrent.futures.ThreadPoolExecutor()
 
 binance_session = requests.Session()
 
+http = urllib3.PoolManager()
+
 
 def binance_close_position(api_key, api_secret, symbol):
-    def binance_generate_signature(query_string, api_secret):
-        return hmac.new(api_secret.encode('utf-8'), query_string.encode('utf-8'), hashlib.sha256).hexdigest()
+    # Generate current timestamp in milliseconds
+    timestamp = int(time.time() * 1000)
 
-    timestamp = int(time.time() * 1000)  # Generate current timestamp in milliseconds
-    headers = {
+    # Prepare headers
+    binance_headers = {
         'X-MBX-APIKEY': api_key
     }
 
@@ -136,8 +142,10 @@ def binance_close_position(api_key, api_secret, symbol):
     signature = binance_generate_signature(query_string, api_secret)
     params['signature'] = signature
 
-    response = binance_session.get('https://fapi.binance.com/fapi/v2/positionRisk', headers=headers, params=params)
-    position = response.json()
+    http = urllib3.PoolManager()
+    response = http.request('GET', 'https://fapi.binance.com/fapi/v2/positionRisk', headers=binance_headers,
+                            fields=params)
+    position = json.loads(response.data)
 
     if position:
         quantity = abs(float(position[0]['positionAmt']))
@@ -155,8 +163,10 @@ def binance_close_position(api_key, api_secret, symbol):
             signature = binance_generate_signature(query_string, api_secret)
             params['signature'] = signature
 
-            response = binance_session.post('https://fapi.binance.com/fapi/v1/order', headers=headers, params=params)
-            order = response.json()
+            encoded_params = urllib.parse.urlencode(params)
+            full_url = f"https://fapi.binance.com/fapi/v1/order?{encoded_params}"
+            response = http.request('POST', full_url, headers=binance_headers)
+            order = json.loads(response.data)
             return order
         else:
             return "No position to close."
@@ -172,19 +182,21 @@ def bybit_close_position(api_key, api_secret, symbol):
     # Fetch position details
     response = bybit_futures.private_get_private_linear_position_list({'symbol': symbol})
     position = response['result'][0]
-    qty = abs(int(position['size']))  # Absolute value of size
+    qty = abs(float(position['size']))  # Absolute value of size
 
     # Close position
     if position['side'] == 'Buy':  # Long position
-        order = bybit_futures.create_market_sell_order(symbol=symbol, amount=qty, params={'reduce_only': True})  # Long position
+        order = bybit_futures.create_market_sell_order(symbol=symbol, amount=qty,
+                                                       params={'reduce_only': True})  # Long position
     elif position['side'] == 'Sell':  # Short position
-        order = bybit_futures.create_market_buy_order(symbol=symbol, amount=qty, params={'reduce_only': True})  # Short position
+        order = bybit_futures.create_market_buy_order(symbol=symbol, amount=qty,
+                                                      params={'reduce_only': True})  # Short position
 
     # Return the order result or any other desired output
     return order
 
 
-bybit_httpClient = requests.Session()
+http = urllib3.PoolManager()
 bybit_recv_window = str(5000)
 bybit_url = "https://api.bybit.com"  # Testnet endpoint
 
@@ -207,11 +219,15 @@ def bybit_HTTP_Request(api_key, secret_key, endPoint, method, payload, Info):
         'X-BAPI-RECV-WINDOW': bybit_recv_window,
         'Content-Type': 'application/json'
     }
+
     if method == "POST":
-        response = bybit_httpClient.request(method, bybit_url + endPoint, headers=headers, data=payload)
+        response = http.request(method, bybit_url + endPoint, headers=headers, body=payload)
     else:
-        response = bybit_httpClient.request(method, bybit_url + endPoint + "?" + payload, headers=headers)
-    print(response.text)
+        full_url = bybit_url + endPoint + "?" + payload
+        response = http.request(method, full_url, headers=headers)
+
+    response_data = json.loads(response.data.decode('utf-8'))
+    print(response_data)
     print(Info + " Elapsed Time : " + str(response.elapsed))
 
 

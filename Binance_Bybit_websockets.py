@@ -51,7 +51,7 @@ def get_binance_volumes() -> List[dict]:
 binance_volumes = get_binance_volumes()
 filtered_volumes = [pair for pair in binance_volumes if pair['symbol'] in matching_pairs]
 sorted_volumes = sorted(filtered_volumes, key=lambda x: float(x['quoteVolume']))
-print('selected_pairs amount is: ',len(sorted_volumes))
+print('selected_pairs amount is: ', len(sorted_volumes))
 selected_pairs = [pair['symbol'] for pair in sorted_volumes[:200]]
 
 # Remove the first latest_prices initialization
@@ -92,7 +92,6 @@ def process_binance_data(data):
     last_received_timestamps[pair]['binance'] = timestamp  # Store the timestamp of the received data
 
     process_arbitrage_data(pair, latest_prices, last_arbitrage_opportunities, delayed_prints)
-
 
 
 def process_bybit_data(data):
@@ -142,7 +141,7 @@ def process_bybit_data(data):
 
 async def print_heartbeat():
     while True:
-        await asyncio.sleep(60 * 20)  # Print the heartbeat every 600 seconds (10 minutes)
+        await asyncio.sleep(60 * 50)  # Print the heartbeat every 600 seconds (50 minutes)
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         print(f"Heartbeat at {current_time}")
 
@@ -240,7 +239,6 @@ async def binance_websocket():
         except Exception as e:
             print(f"Binance websocket connection error: {e}. Reconnecting...")
             await asyncio.sleep(5)
-
 
 
 async def bybit_websocket():
