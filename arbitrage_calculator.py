@@ -311,7 +311,7 @@ def display_open_positions():
     for symbol, positions in open_positions.items():
         if len(positions) > 0:
             now = time.time()
-            if symbol not in last_displayed or now - last_displayed[symbol] >= 0.3:  # 0.1 seconds = 100 milliseconds
+            if symbol not in last_displayed or now - last_displayed[symbol] >= 0.3:  # 0.3 seconds = 300 milliseconds
                 print(f"{symbol}: {len(positions)} open trades")
                 for i, position in enumerate(positions, start=1):
                     print(
