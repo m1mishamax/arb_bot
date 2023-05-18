@@ -10,7 +10,7 @@ from arbitrage_calculator import process_arbitrage_data
 # Constants
 API_BASE_BINANCE = "https://fapi.binance.com"
 API_BASE_BYBIT = "https://api.bybit.com"
-ignored_tokens = []
+ignored_tokens = ['AVAXUSDT','SOLUSDT']
 
 
 # REST API calls to get trading pairs

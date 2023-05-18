@@ -51,6 +51,8 @@ def binance_futures_get_precision(symbol, exchange_info):
 
 # Retrieve exchange info
 binance_exchange_info = binance_futures_get_exchange_info()
+binance_executor = concurrent.futures.ThreadPoolExecutor()
+bybit_executor = concurrent.futures.ThreadPoolExecutor()
 
 
 def adjust_precision(quantity, precision):
@@ -117,8 +119,6 @@ def binance_open_order(api_key, api_secret, symbol, side, order_type, usdt_amoun
     print(response_data, 'response_data_binance')
 
 
-binance_executor = concurrent.futures.ThreadPoolExecutor()
-
 binance_session = requests.Session()
 
 
@@ -141,7 +141,8 @@ def binance_close_position(api_key, api_secret, symbol):
     params['signature'] = signature
 
     http = urllib3.PoolManager()
-    response = http.request('GET', 'https://fapi.binance.com/fapi/v2/positionRisk', headers=binance_headers, fields=params)
+    response = http.request('GET', 'https://fapi.binance.com/fapi/v2/positionRisk', headers=binance_headers,
+                            fields=params)
     position = json.loads(response.data)
 
     if position:
@@ -156,6 +157,7 @@ def binance_close_position(api_key, api_secret, symbol):
                 'timestamp': timestamp,
                 'reduceOnly': 'true'  # Add this line
             }
+            print(params, 'binance closing 160')
             query_string = urllib.parse.urlencode(params)
             signature = binance_generate_signature(query_string, api_secret)
             params['signature'] = signature
@@ -164,36 +166,12 @@ def binance_close_position(api_key, api_secret, symbol):
             full_url = f"https://fapi.binance.com/fapi/v1/order?{encoded_params}"
             response = http.request('POST', full_url, headers=binance_headers)
             order = json.loads(response.data)
-            print('167 binance closed order successfully',order)
+            print('167 binance closed order successfully', order)
             return order
         else:
             return "No position to close."
     else:
         return "No position information found."
-
-
-def bybit_close_position(api_key, api_secret, symbol):
-    bybit_futures = ccxt.bybit()
-    bybit_futures.apiKey = api_key
-    bybit_futures.secret = api_secret
-
-    # Fetch position details
-    response = bybit_futures.private_get_private_linear_position_list({'symbol': symbol})
-    position = response['result'][0]
-    qty = abs(float(position['size']))  # Absolute value of size
-
-    # Close position
-    if position['side'] == 'Buy':  # Long position
-        order = bybit_futures.create_market_sell_order(symbol=symbol, amount=qty,
-                                                       params={'reduce_only': True})  # Long position
-        print('bybit closed position 192', symbol)
-    elif position['side'] == 'Sell':  # Short position
-        order = bybit_futures.create_market_buy_order(symbol=symbol, amount=qty,
-                                                      params={'reduce_only': True})  # Short position
-        print('bybit closed position 196', symbol)
-
-    # Return the order result or any other desired output
-    return order
 
 
 http = urllib3.PoolManager()
@@ -228,7 +206,8 @@ def bybit_HTTP_Request(api_key, secret_key, endPoint, method, payload, Info):
 
     response_data = json.loads(response.data.decode('utf-8'))
     print(response_data)
-    print(Info + " Elapsed Time : " + str(response.elapsed))
+    return response_data
+    # print(Info + " Elapsed Time : " + str(response.elapsed))
 
 
 def bybit_open_order(api_key, api_secret, symbol, side, order_type, usdt_amount, leverage, price=None):
@@ -239,10 +218,60 @@ def bybit_open_order(api_key, api_secret, symbol, side, order_type, usdt_amount,
     amount = usdt_amount / price
     amount = round(amount, 8)
     params = f'{{"symbol":"{symbol}","orderType":"{order_type}","side":"{side.capitalize()}","qty":"{amount:.8f}","price":"{price:.8f}","timeInForce":"{time_in_force}","category":"linear","orderLinkId":"{orderLinkId}"}}'
-    bybit_HTTP_Request(api_key, api_secret, endpoint, method, params, "Create")
+    print('bybit_open_order', params)
+    return bybit_HTTP_Request(api_key, api_secret, endpoint, method, params, "Create")
 
 
-bybit_executor = concurrent.futures.ThreadPoolExecutor()
+def bybit_close_position(api_key, api_secret, symbol):
+    def bybit_open_order_x(api_key, api_secret, symbol, side, order_type, amount, leverage):
+        endpoint = "/contract/v3/private/order/create"
+        method = "POST"
+        orderLinkId = uuid.uuid4().hex
+        time_in_force = 'GoodTillCancel'
+        amount = round(amount, 8)
+        params = f'{{"symbol":"{symbol}","orderType":"{order_type}","side":"{side.capitalize()}","qty":"{amount:.8f}","timeInForce":"{time_in_force}","category":"linear","orderLinkId":"{orderLinkId}"}}'
+        print('bybit_open_order', params)
+        return bybit_HTTP_Request(api_key, api_secret, endpoint, method, params, "Create")
+
+    def bybit_get_open_orders(api_key, api_secret, symbol):
+        try:
+            endpoint = "/contract/v3/private/position/list"
+            method = "GET"
+            payload = f'symbol={symbol}'
+            return bybit_HTTP_Request(api_key, api_secret, endpoint, method, payload, "Fetch open orders")
+        except Exception as e:
+            print(f"Exception in bybit_get_open_orders: {e}")
+
+    # First, get the open order
+    open_orders = bybit_get_open_orders(api_key, api_secret, symbol)
+    print(open_orders, 'test')
+
+    if open_orders is None:
+        print("Error retrieving open orders.")
+        return
+
+    if open_orders['retCode'] == 0 and open_orders['result']['list']:
+        # Assuming there's only one open order for the symbol
+        open_order = open_orders['result']['list'][0]
+
+        # Get the size (quantity) of the open order
+        size = float(open_order['size'])
+
+        # Get the side of the open order. The side for the close order will be the opposite.
+        open_order_side = open_order['side']
+        close_order_side = 'Sell' if open_order_side == 'Buy' else 'Buy'
+
+        # Close the order by placing an opposite order with the same size.
+        # Assuming the order_type, usdt_amount, leverage and price are same as those in bybit_open_order
+        order_type = 'Market'  # For simplicity, we are using 'Market' order to close the position immediately.
+        usdt_amount = size  # The size of the open order
+        leverage = 10  # The leverage used for the open order
+        print(api_key, api_secret, symbol, close_order_side, order_type, usdt_amount, leverage)
+        bybit_open_order_x(api_key, api_secret, symbol, close_order_side, order_type, usdt_amount, leverage)
+
+    else:
+        print("No open order to close.")
+
 
 # arbitrage_calculator.py
 from config import ARBITRAGE_THRESHOLD, MAX_POSITIONS_PER_PAIR, MAX_TOTAL_POSITIONS, PERCENT_ACCEPTANCE
@@ -273,7 +302,7 @@ def close_position(symbol, long_exchange, short_exchange, amount, long_price, sh
         # result_bybit = bybit_close_position(api_key_bybit, secret_key_bybit, symbol)
         print('closing long_exchange binance 274')
         bybit_executor.submit(bybit_close_position, api_key_bybit, secret_key_bybit, symbol)
-        binance_executor.submit(binance_close_position, api_key_bybit, secret_key_bybit, symbol)
+        binance_executor.submit(binance_close_position, api_key_binance, secret_key_binance, symbol)
         print('after closing long_exchange binance 277')
         # print(result_bybit)
         # close_positions_concurrently(api_key_binance, secret_key_binance, api_key_bybit, secret_key_bybit, symbol)
@@ -286,7 +315,7 @@ def close_position(symbol, long_exchange, short_exchange, amount, long_price, sh
         # result_bybit = bybit_close_position(api_key_bybit, secret_key_bybit, symbol)
         print('closing long_exchange bybit 287')
         bybit_executor.submit(bybit_close_position, api_key_bybit, secret_key_bybit, symbol)
-        binance_executor.submit(binance_close_position, api_key_bybit, secret_key_bybit, symbol)
+        binance_executor.submit(binance_close_position, api_key_binance, secret_key_binance, symbol)
         print('closing long_exchange bybit 290')
         # print(result_bybit)
         # close_positions_concurrently(api_key_binance, secret_key_binance, api_key_bybit, secret_key_bybit, symbol)
@@ -304,19 +333,14 @@ def close_position(symbol, long_exchange, short_exchange, amount, long_price, sh
         print("Failed to close position")
 
 
-last_displayed = {}
-
 def display_open_positions():
     print("\nCurrent open positions:")
     for symbol, positions in open_positions.items():
         if len(positions) > 0:
-            now = time.time()
-            if symbol not in last_displayed or now - last_displayed[symbol] >= 0.3:  # 0.3 seconds = 300 milliseconds
-                print(f"{symbol}: {len(positions)} open trades")
-                for i, position in enumerate(positions, start=1):
-                    print(
-                        f"  {i}. Long on {position['long_exchange']}, short on {position['short_exchange']}, amount: {position['amount']}")
-                last_displayed[symbol] = now
+            print(f"{symbol}: {len(positions)} open trades")
+            for i, position in enumerate(positions, start=1):
+                print(
+                    f"  {i}. Long on {position['long_exchange']}, short on {position['short_exchange']}, amount: {position['amount']}")
 
 
 def write_trading_history_to_csv(trade_type, symbol, long_exchange, short_exchange, amount, timestamp, long_price,
@@ -459,6 +483,7 @@ def execute_arbitrage_trade(symbol, long_exchange, short_exchange, amount, long_
             print(f"Arbitrage trade executed: long on {long_exchange}, short on {short_exchange} {datetime.now()}")
             write_trading_history_to_csv("trade_open", symbol, long_exchange, short_exchange, amount,
                                          datetime.now(timezone.utc), long_price, short_price, percent_profit)
+            display_open_positions()
             print()
         else:
             print("Failed to execute arbitrage trade")
@@ -470,9 +495,9 @@ def execute_arbitrage_trade(symbol, long_exchange, short_exchange, amount, long_
             limits_reached.append(f"maximum total positions ({MAX_TOTAL_POSITIONS})")
 
         limits_str = " and ".join(limits_reached)
-        print(f"Cannot execute arbitrage trade for {symbol}: reached {limits_str}.")
-        print(f"Open trades for {symbol}: {positions_per_pair}")
-        display_open_positions()
+        # print(f"Cannot execute arbitrage trade for {symbol}: reached {limits_str}.")
+        # print(f"Open trades for {symbol}: {positions_per_pair}")
+
         write_open_positions_to_csv()
 
 
@@ -542,6 +567,11 @@ def calculate_percent_profit(long_price, short_price):
     return ((short_price - long_price) / long_price) * 100
 
 
+# This dictionary keeps track of the last print time for each pair
+last_print_times_1 = {}
+last_print_times_2 = {}
+
+
 def process_arbitrage_data(pair, latest_prices, last_arbitrage_opportunities, delayed_prints):
     binance_data = latest_prices[pair]['binance'][0]
     bybit_data = latest_prices[pair]['bybit'][0]
@@ -567,6 +597,7 @@ def process_arbitrage_data(pair, latest_prices, last_arbitrage_opportunities, de
     binance_timestamp = latest_prices[pair]['binance'][0]['timestamp'].strftime("%Y-%m-%d %H:%M:%S.%f")
     percent_profit = calculate_percent_profit(binance_data['ask_price'], bybit_data['bid_price'])
     # print(percent_profit, '1x')
+    print_delay = 1  # delay in seconds
     # Check if Bybit's bid price is higher than Binance's ask price
     if bybit_data['bid_price'] > binance_data['ask_price']:
         long_exchange = 'binance'
@@ -574,9 +605,11 @@ def process_arbitrage_data(pair, latest_prices, last_arbitrage_opportunities, de
         percent_profit = calculate_percent_profit(binance_data['ask_price'], bybit_data['bid_price'])
         # print(percent_profit, '1xx')
         if percent_profit >= ARBITRAGE_THRESHOLD:
-            print(pair, long_exchange, binance_data['ask_price'], short_exchange, bybit_data['bid_price'], 'amount',
-                  f'percent_profit1xxc: {percent_profit:.2f}%, Bybit timestamp: {bybit_timestamp}, Binance timestamp: {binance_timestamp}')
-            execute_arbitrage_trade(pair, long_exchange, short_exchange, 6, binance_data['ask_price'],
+            if pair not in last_print_times_1 or time.time() - last_print_times_1[pair] >= print_delay:
+                print(pair, long_exchange, binance_data['ask_price'], short_exchange, bybit_data['bid_price'], 'amount',
+                      f'percent_profit1xxc: {percent_profit:.2f}%, Bybit timestamp: {bybit_timestamp}, Binance timestamp: {binance_timestamp}')
+                last_print_times_1[pair] = time.time()  # update the last print time for this pair
+            execute_arbitrage_trade(pair, long_exchange, short_exchange, 7, binance_data['ask_price'],
                                     bybit_data['bid_price'])
             percent_profit = calculate_percent_profit(bybit_data['bid_price'], binance_data['ask_price'])
             # print(percent_profit, '1xxz', pair)
@@ -606,9 +639,12 @@ def process_arbitrage_data(pair, latest_prices, last_arbitrage_opportunities, de
         percent_profit = calculate_percent_profit(bybit_data['ask_price'], binance_data['bid_price'])
         # print(percent_profit, '2x')
         if percent_profit >= ARBITRAGE_THRESHOLD:
-            print(pair, long_exchange, bybit_data['ask_price'], short_exchange, binance_data['bid_price'], 'amount',
-                  f'percent_profit2xxc: {percent_profit:.2f}%, Bybit timestamp: {bybit_timestamp}, Binance timestamp: {binance_timestamp}')
-            execute_arbitrage_trade(pair, long_exchange, short_exchange, 6, bybit_data['ask_price'],
+
+            if pair not in last_print_times_2 or time.time() - last_print_times_2[pair] >= print_delay:
+                print(pair, long_exchange, bybit_data['ask_price'], short_exchange, binance_data['bid_price'], 'amount',
+                      f'percent_profit2xxc: {percent_profit:.2f}%, Bybit timestamp: {bybit_timestamp}, Binance timestamp: {binance_timestamp}')
+                last_print_times_2[pair] = time.time()  # update the last print time for this pair
+            execute_arbitrage_trade(pair, long_exchange, short_exchange, 7, bybit_data['ask_price'],
                                     binance_data['bid_price'])
             percent_profit = calculate_percent_profit(binance_data['bid_price'], bybit_data['ask_price'])
             # print(percent_profit, '2xxz', pair)
@@ -629,3 +665,6 @@ def process_arbitrage_data(pair, latest_prices, last_arbitrage_opportunities, de
                             f"Closing position for2xxc {pair, position['long_exchange'], bybit_data['bid_price'], position['short_exchange'], binance_data['ask_price']} as price "
                             f"difference is {percent_profit:.2f}%,binance_data['bid_price'] > bybit_data['ask_price']",
                             binance_data['bid_price'], bybit_data['ask_price'])
+
+
+
