@@ -10,7 +10,7 @@ from arbitrage_calculator import process_arbitrage_data
 # Constants
 API_BASE_BINANCE = "https://fapi.binance.com"
 API_BASE_BYBIT = "https://api.bybit.com"
-ignored_tokens = ['AVAXUSDT','SOLUSDT']
+ignored_tokens = []
 
 
 # REST API calls to get trading pairs
@@ -281,7 +281,7 @@ async def print_statement():
     # Loop indefinitely
     while True:
         # Wait for 10 minutes using asyncio.sleep
-        await asyncio.sleep(300)
+        await asyncio.sleep(1200)
 
         # Print the statement
         count += 1
