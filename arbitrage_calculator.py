@@ -301,8 +301,8 @@ def close_position(symbol, long_exchange, short_exchange, amount, long_price, sh
         # print(result_binance)
         # result_bybit = bybit_close_position(api_key_bybit, secret_key_bybit, symbol)
         print('closing long_exchange binance 274')
-        bybit_executor.submit(bybit_close_position, api_key_bybit, secret_key_bybit, symbol)
-        binance_executor.submit(binance_close_position, api_key_binance, secret_key_binance, symbol)
+        # bybit_executor.submit(bybit_close_position, api_key_bybit, secret_key_bybit, symbol)
+        # binance_executor.submit(binance_close_position, api_key_binance, secret_key_binance, symbol)
         print('after closing long_exchange binance 277')
         # print(result_bybit)
         # close_positions_concurrently(api_key_binance, secret_key_binance, api_key_bybit, secret_key_bybit, symbol)
@@ -314,8 +314,8 @@ def close_position(symbol, long_exchange, short_exchange, amount, long_price, sh
         # print(result_binance)
         # result_bybit = bybit_close_position(api_key_bybit, secret_key_bybit, symbol)
         print('closing long_exchange bybit 287')
-        bybit_executor.submit(bybit_close_position, api_key_bybit, secret_key_bybit, symbol)
-        binance_executor.submit(binance_close_position, api_key_binance, secret_key_binance, symbol)
+        # bybit_executor.submit(bybit_close_position, api_key_bybit, secret_key_bybit, symbol)
+        # binance_executor.submit(binance_close_position, api_key_binance, secret_key_binance, symbol)
         print('closing long_exchange bybit 290')
         # print(result_bybit)
         # close_positions_concurrently(api_key_binance, secret_key_binance, api_key_bybit, secret_key_bybit, symbol)
@@ -438,15 +438,15 @@ def execute_arbitrage_trade(symbol, long_exchange, short_exchange, amount, long_
                   long_price, datetime.now(), '374')
             # binance_open_order(api_key_binance, secret_key_binance, symbol, 'buy', 'market', usdt_amount, 3,
             #                    long_price)
-            binance_executor.submit(binance_open_order, api_key_binance, secret_key_binance, symbol, 'buy', 'market',
-                                    usdt_amount, 3,
-                                    long_price)
+            # binance_executor.submit(binance_open_order, api_key_binance, secret_key_binance, symbol, 'buy', 'market',
+            #                         usdt_amount, 3,
+            #                         long_price)
             print('380 haha I was launched')
             print(short_exchange, symbol, 'sell', 'market', usdt_amount, 3,
                   short_price, datetime.now())
             # bybit_open_order(api_key_bybit, secret_key_bybit, symbol, 'sell', 'market', usdt_amount, 3, short_price)
-            bybit_executor.submit(bybit_open_order, api_key_bybit, secret_key_bybit, symbol, 'Sell', 'Market',
-                                  usdt_amount, 3, short_price)
+            # bybit_executor.submit(bybit_open_order, api_key_bybit, secret_key_bybit, symbol, 'Sell', 'Market',
+            #                       usdt_amount, 3, short_price)
             print(f"long_exchange_x: {long_exchange}, AfterBothOrdersTheTime", datetime.now())
 
             pass
@@ -457,15 +457,15 @@ def execute_arbitrage_trade(symbol, long_exchange, short_exchange, amount, long_
             # short_order = place_binance_order(symbol, "sell", amount)
             print(long_exchange, symbol, 'buy', 'market', usdt_amount, 3, long_exchange, datetime.now())
             # bybit_open_order(api_key_bybit, secret_key_bybit, symbol, 'buy', 'market', usdt_amount, 3, long_price)
-            bybit_executor.submit(bybit_open_order, api_key_bybit, secret_key_bybit, symbol, 'Buy', 'Market',
-                                  usdt_amount, 3, long_price)
+            # bybit_executor.submit(bybit_open_order, api_key_bybit, secret_key_bybit, symbol, 'Buy', 'Market',
+            #                       usdt_amount, 3, long_price)
             print(short_exchange, symbol, 'sell', 'market', usdt_amount, 3,
                   short_price, datetime.now())
             # binance_open_order(api_key_binance, secret_key_binance, symbol, 'sell', 'market', usdt_amount, 3,
             #                    short_price)
-            binance_executor.submit(binance_open_order, api_key_binance, secret_key_binance, symbol, 'sell', 'market',
-                                    usdt_amount, 3,
-                                    short_price)
+            # binance_executor.submit(binance_open_order, api_key_binance, secret_key_binance, symbol, 'sell', 'market',
+            #                         usdt_amount, 3,
+            #                         short_price)
             print(f"long_exchange_x: {long_exchange}, AfterBothOrdersTheTime", datetime.now())
 
             pass
